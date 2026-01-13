@@ -1,0 +1,29 @@
+{
+  "name": "Soph's Outfit Manager",
+  "author": "Sophey3dx",
+  "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager",
+  "id": "com.soph.packages",
+  "packages": {
+    "com.soph.avatar-outfit-manager": {
+      "versions": {
+        "1.0.0": {
+          "name": "com.soph.avatar-outfit-manager",
+          "displayName": "Soph's Outfit Manager",
+          "version": "1.0.0",
+          "unity": "2022.3",
+          "description": "VRChat Avatar Outfit Manager - Save and load outfit presets with automatic VRChat asset generation, icon rendering, and Expression Menu integration.",
+          "author": {
+            "name": "Sophey3dx",
+            "url": "https://github.com/Sophey3dx"
+          },
+          "vpmDependencies": {
+            "com.vrchat.avatars": ">=3.5.0"
+          },
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.0.0/com.soph.avatar-outfit-manager-1.0.0.zip",
+          "legacyFolders": {},
+          "legacyFiles": {}
+        }
+      }
+    }
+  }
+}
