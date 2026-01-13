@@ -1,0 +1,17 @@
+# Unity generated
+*.meta
+!Editor/Resources/*.meta
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.sln
+*.csproj
+
+# Temporary
+*.tmp
+*.bak

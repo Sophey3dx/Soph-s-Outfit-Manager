@@ -1,0 +1,24 @@
+{
+  "name": "com.soph.avatar-outfit-manager",
+  "displayName": "Soph's Outfit Manager",
+  "version": "1.0.0",
+  "description": "A VRChat avatar outfit management tool that allows saving and loading outfit presets with automatic VRChat asset generation.",
+  "unity": "2022.3",
+  "unityRelease": "6f1",
+  "author": {
+    "name": "Soph"
+  },
+  "keywords": [
+    "vrchat",
+    "avatar",
+    "outfit",
+    "manager",
+    "clothing"
+  ],
+  "license": "MIT",
+  "vpmDependencies": {
+    "com.vrchat.avatars": ">=3.5.0"
+  },
+  "legacyFolders": {},
+  "samples": []
+}
