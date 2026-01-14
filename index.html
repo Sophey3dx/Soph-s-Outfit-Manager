@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soph's Outfit Manager - VRChat Package</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d4ff, #ff6bcb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: #8892b0;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+        
+        .vcc-button {
+            display: inline-block;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            color: white;
+            padding: 20px 50px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.3rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        
+        .vcc-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 212, 255, 0.5);
+        }
+        
+        .manual-link {
+            color: #00d4ff;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-top: 20px;
+            display: block;
+        }
+        
+        .manual-link:hover {
+            text-decoration: underline;
+        }
+        
+        .info {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 10px;
+            text-align: left;
+        }
+        
+        .info h3 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+        }
+        
+        .info ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .info li {
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .info li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #00d4ff;
+        }
+        
+        footer {
+            margin-top: 30px;
+            color: #8892b0;
+            font-size: 0.9rem;
+        }
+        
+        footer a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Soph's Outfit Manager</h1>
+        <p class="tagline">Save & manage outfit presets for your VRChat avatars</p>
+        
+        <a href="vcc://vpm/addRepo?url=https%3A%2F%2Fsophey3dx.github.io%2FSoph-s-Outfit-Manager%2Findex.json" class="vcc-button">
+            Add to VCC
+        </a>
+        
+        <a href="https://github.com/Sophey3dx/Soph-s-Outfit-Manager" class="manual-link">
+            Manual Installation Instructions →
+        </a>
+        
+        <div class="info">
+            <h3>Features</h3>
+            <ul>
+                <li>6 Outfit Slots with visual preview</li>
+                <li>One-Click Setup Wizard</li>
+                <li>Auto Icon Rendering</li>
+                <li>Preset Slot Names</li>
+                <li>Full VRChat SDK 3 Support</li>
+            </ul>
+        </div>
+        
+        <footer>
+            Made with 💜 by <a href="https://github.com/Sophey3dx">Sophey3dx</a>
+        </footer>
+    </div>
+</body>
+</html>

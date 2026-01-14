@@ -26,7 +26,7 @@ A VRChat avatar outfit management tool for Unity that allows you to save and loa
 
 ### Via VCC (Recommended)
 
-1. **[Click here to add to VCC](vcc://vpm/addRepo?url=https://sophey3dx.github.io/Soph-s-Outfit-Manager/index.json)**
+1. **[Click here to add to VCC](vcc://vpm/addRepo?url=https%3A%2F%2Fsophey3dx.github.io%2FSoph-s-Outfit-Manager%2Findex.json)**
 
 Or manually:
 1. Open VRChat Creator Companion
