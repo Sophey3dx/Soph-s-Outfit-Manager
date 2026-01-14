@@ -147,11 +147,25 @@ namespace Soph.AvatarOutfitManager.Editor
                 }
 
                 // Outfit Root
+                EditorGUILayout.BeginHorizontal();
                 var newOutfitRoot = EditorGUILayout.ObjectField(
                     "Outfit Root",
                     outfitRoot,
                     typeof(Transform),
                     true) as Transform;
+
+                // Auto-Detect Button
+                GUI.enabled = avatarDescriptor != null;
+                if (GUILayout.Button("Auto", GUILayout.Width(45)))
+                {
+                    AutoDetectOutfitRoot();
+                }
+                if (GUILayout.Button("+", GUILayout.Width(25)))
+                {
+                    CreateOutfitRootFolder();
+                }
+                GUI.enabled = true;
+                EditorGUILayout.EndHorizontal();
 
                 if (newOutfitRoot != outfitRoot)
                 {
@@ -159,14 +173,27 @@ namespace Soph.AvatarOutfitManager.Editor
                     ValidateOutfitRoot();
                 }
 
-                // Show warning if outfit root is not child of avatar
-                if (outfitRoot != null && avatarDescriptor != null)
+                // Show info about outfit root
+                if (outfitRoot == null && avatarDescriptor != null)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Click 'Auto' to auto-detect or '+' to create a new Outfit folder.",
+                        MessageType.Info);
+                }
+                else if (outfitRoot != null && avatarDescriptor != null)
                 {
                     if (!outfitRoot.IsChildOf(avatarDescriptor.transform))
                     {
                         EditorGUILayout.HelpBox(
                             "Outfit Root must be a child of the selected Avatar!",
                             MessageType.Error);
+                    }
+                    else
+                    {
+                        int childCount = CountToggleableObjects(outfitRoot);
+                        EditorGUILayout.HelpBox(
+                            $"Found {childCount} toggleable objects under '{outfitRoot.name}'",
+                            MessageType.None);
                     }
                 }
 
@@ -851,6 +878,163 @@ namespace Soph.AvatarOutfitManager.Editor
                 {
                     kvp.Key.gameObject.SetActive(kvp.Value);
                 }
+            }
+        }
+
+        #endregion
+
+        #region Outfit Root Auto-Detection
+
+        // Common names for outfit/clothing folders
+        private static readonly string[] OutfitFolderNames = new string[]
+        {
+            "Clothing", "Clothes", "Outfits", "Outfit", "Accessories",
+            "Toggles", "Toggle", "Wearables", "Apparel", "Garments",
+            "clothing", "clothes", "outfits", "outfit", "accessories"
+        };
+
+        // Names to exclude (these are usually not outfit containers)
+        private static readonly string[] ExcludedNames = new string[]
+        {
+            "Armature", "Body", "Head", "Hair", "Eyes", "Teeth", "Tongue",
+            "armature", "body", "head", "hair", "eyes", "teeth", "tongue"
+        };
+
+        private void AutoDetectOutfitRoot()
+        {
+            if (avatarDescriptor == null)
+            {
+                EditorUtility.DisplayDialog("Error", "Please assign an Avatar first!", "OK");
+                return;
+            }
+
+            Transform detected = null;
+
+            // Step 1: Look for common folder names
+            foreach (string folderName in OutfitFolderNames)
+            {
+                detected = FindChildByName(avatarDescriptor.transform, folderName);
+                if (detected != null)
+                {
+                    outfitRoot = detected;
+                    Debug.Log($"[Outfit Manager] Auto-detected outfit root: '{detected.name}'");
+                    return;
+                }
+            }
+
+            // Step 2: Find folder with most toggleable children (meshes)
+            Transform bestCandidate = null;
+            int maxToggleables = 0;
+
+            foreach (Transform child in avatarDescriptor.transform)
+            {
+                // Skip excluded names
+                bool isExcluded = false;
+                foreach (string excluded in ExcludedNames)
+                {
+                    if (child.name.Contains(excluded))
+                    {
+                        isExcluded = true;
+                        break;
+                    }
+                }
+                if (isExcluded) continue;
+
+                int toggleables = CountToggleableObjects(child);
+                if (toggleables > maxToggleables)
+                {
+                    maxToggleables = toggleables;
+                    bestCandidate = child;
+                }
+            }
+
+            if (bestCandidate != null && maxToggleables >= 2)
+            {
+                outfitRoot = bestCandidate;
+                Debug.Log($"[Outfit Manager] Auto-detected outfit root by content: '{bestCandidate.name}' ({maxToggleables} toggleables)");
+                return;
+            }
+
+            // Step 3: No suitable folder found
+            if (EditorUtility.DisplayDialog(
+                "No Outfit Folder Found",
+                "Could not find an outfit folder. Would you like to create one?",
+                "Create 'Outfits' Folder", "Cancel"))
+            {
+                CreateOutfitRootFolder();
+            }
+        }
+
+        private void CreateOutfitRootFolder()
+        {
+            if (avatarDescriptor == null)
+            {
+                EditorUtility.DisplayDialog("Error", "Please assign an Avatar first!", "OK");
+                return;
+            }
+
+            // Check if folder already exists
+            Transform existing = FindChildByName(avatarDescriptor.transform, "Outfits");
+            if (existing != null)
+            {
+                outfitRoot = existing;
+                Debug.Log("[Outfit Manager] Using existing 'Outfits' folder");
+                return;
+            }
+
+            // Create new folder
+            Undo.RecordObject(avatarDescriptor.gameObject, "Create Outfit Folder");
+            
+            GameObject outfitFolder = new GameObject("Outfits");
+            outfitFolder.transform.SetParent(avatarDescriptor.transform);
+            outfitFolder.transform.localPosition = Vector3.zero;
+            outfitFolder.transform.localRotation = Quaternion.identity;
+            outfitFolder.transform.localScale = Vector3.one;
+
+            Undo.RegisterCreatedObjectUndo(outfitFolder, "Create Outfit Folder");
+
+            outfitRoot = outfitFolder.transform;
+            
+            Debug.Log("[Outfit Manager] Created new 'Outfits' folder");
+            
+            EditorUtility.DisplayDialog(
+                "Folder Created",
+                "Created 'Outfits' folder under your avatar.\n\n" +
+                "Now drag your clothing/accessory GameObjects into this folder!",
+                "OK");
+        }
+
+        private Transform FindChildByName(Transform parent, string name)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return child;
+                }
+            }
+            return null;
+        }
+
+        private int CountToggleableObjects(Transform root)
+        {
+            int count = 0;
+            CountToggleablesRecursive(root, ref count);
+            return count;
+        }
+
+        private void CountToggleablesRecursive(Transform parent, ref int count)
+        {
+            foreach (Transform child in parent)
+            {
+                // Count objects that have renderers (meshes) or are likely toggleable
+                if (child.GetComponent<Renderer>() != null || 
+                    child.GetComponent<SkinnedMeshRenderer>() != null ||
+                    child.childCount > 0)
+                {
+                    count++;
+                }
+                CountToggleablesRecursive(child, ref count);
             }
         }
 
