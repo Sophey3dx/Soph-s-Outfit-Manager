@@ -6,6 +6,23 @@
   "packages": {
     "com.soph.avatar-outfit-manager": {
       "versions": {
+        "1.2.2": {
+          "name": "com.soph.avatar-outfit-manager",
+          "displayName": "Soph's Outfit Manager",
+          "version": "1.2.2",
+          "unity": "2022.3",
+          "description": "Improved Inspector with diagnostics, auto-fix, and safe slot capture (only outfit root objects).",
+          "author": {
+            "name": "Sophey3dx",
+            "url": "https://github.com/Sophey3dx"
+          },
+          "vpmDependencies": {
+            "com.vrchat.avatars": ">=3.5.0"
+          },
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.2/com.soph.avatar-outfit-manager-1.2.2.zip",
+          "legacyFolders": {},
+          "legacyFiles": {}
+        },
         "1.2.1": {
           "name": "com.soph.avatar-outfit-manager",
           "displayName": "Soph's Outfit Manager",

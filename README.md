@@ -160,6 +160,12 @@ Or manually:
 
 ## Changelog
 
+### v1.2.2
+- Improved Inspector: Detailed slot overview, validation warnings, and diagnostics
+- Added "Diagnostics & Fix" panel: One-click repair for missing assets
+- Safe Slot Capture: Only records objects under Outfit Root (ignores SPS/Gogo/etc.)
+- Menu Fix: Buttons now correctly set Int parameters (fixed toggle issue)
+
 ### v1.2.1
 - Fixed: One-Click Setup now always creates "Soph Outfit Manager" GameObject
 - No longer uses existing folders like SPS or other outfit folders

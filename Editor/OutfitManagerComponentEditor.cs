@@ -14,6 +14,7 @@ namespace Soph.AvatarOutfitManager.Editor
     {
         private Dictionary<int, bool> slotFoldouts = new Dictionary<int, bool>();
         private bool showValidation = true;
+        private bool showDiagnostics = true;
         private bool showOutfits = true;
         private Vector2 scrollPosition;
 
@@ -41,6 +42,17 @@ namespace Soph.AvatarOutfitManager.Editor
             {
                 EditorGUI.indentLevel++;
                 DrawValidation(component);
+                EditorGUI.indentLevel--;
+            }
+
+            EditorGUILayout.Space(5);
+
+            // Diagnostics Section
+            showDiagnostics = EditorGUILayout.Foldout(showDiagnostics, "Diagnostics & Fix", true);
+            if (showDiagnostics)
+            {
+                EditorGUI.indentLevel++;
+                DrawDiagnostics(component);
                 EditorGUI.indentLevel--;
             }
 
@@ -149,6 +161,68 @@ namespace Soph.AvatarOutfitManager.Editor
             if (validation.errors.Count == 0 && validation.warnings.Count == 0 && validation.infos.Count == 0)
             {
                 EditorGUILayout.HelpBox("No validation information available.", MessageType.Info);
+            }
+        }
+
+        private void DrawDiagnostics(OutfitManagerComponent component)
+        {
+            var avatarDescriptor = component.GetComponentInParent<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
+            var result = OutfitDiagnostics.Run(avatarDescriptor, component.OutfitRoot, component.SlotData);
+
+            MessageType summaryType = MessageType.Info;
+            if (result.ErrorCount > 0)
+            {
+                summaryType = MessageType.Error;
+            }
+            else if (result.WarningCount > 0)
+            {
+                summaryType = MessageType.Warning;
+            }
+
+            EditorGUILayout.HelpBox(
+                $"Diagnostics: {result.ErrorCount} error(s), {result.WarningCount} warning(s).",
+                summaryType);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Re-validate"))
+            {
+                Repaint();
+            }
+            if (GUILayout.Button("Fix Now"))
+            {
+                bool confirm = EditorUtility.DisplayDialog(
+                    "Fix Now",
+                    "This will regenerate VRChat assets (FX layer, parameters, and menus). Continue?",
+                    "Yes",
+                    "Cancel");
+                if (confirm)
+                {
+                    bool fixedOk = OutfitDiagnostics.FixNow(
+                        avatarDescriptor,
+                        component.OutfitRoot,
+                        component.SlotData,
+                        OutfitDiagnostics.DefaultOutputFolder);
+                    if (!fixedOk)
+                    {
+                        EditorUtility.DisplayDialog("Fix Failed", "Unable to fix because required data is missing.", "OK");
+                    }
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
+            if (result.items.Count > 0)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var item in result.items)
+                {
+                    MessageType messageType = item.severity == DiagnosticSeverity.Error
+                        ? MessageType.Error
+                        : item.severity == DiagnosticSeverity.Warning
+                            ? MessageType.Warning
+                            : MessageType.Info;
+                    EditorGUILayout.HelpBox(item.message, messageType);
+                }
+                EditorGUI.indentLevel--;
             }
         }
 

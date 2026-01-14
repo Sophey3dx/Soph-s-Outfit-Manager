@@ -55,6 +55,14 @@ namespace Soph.AvatarOutfitManager.Editor
             "Armature", "Body", "Head", "Hair", "Eyes", "Teeth", "Tongue"
         };
 
+        private static readonly string[] ExcludedSystemKeywords =
+        {
+            "sps",
+            "gogoloco",
+            "gesturemanager",
+            "vrcfury"
+        };
+
         // Styles
         private GUIStyle headerStyle;
         private GUIStyle wizardHeaderStyle;
@@ -1139,6 +1147,10 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             foreach (Transform child in current)
             {
+                if (ShouldSkipCapture(child))
+                {
+                    continue;
+                }
                 string relativePath = VRChatAssetGenerator.GetRelativePath(root, child);
                 states.Add(new GameObjectState
                 {
@@ -1147,6 +1159,33 @@ namespace Soph.AvatarOutfitManager.Editor
                 });
                 CollectObjectStates(root, child, states);
             }
+        }
+
+        private bool ShouldSkipCapture(Transform target)
+        {
+            if (target == null) return true;
+
+            // Skip editor-only objects
+            if (target.CompareTag("EditorOnly")) return true;
+
+            // Skip hidden or non-editable objects
+            if ((target.hideFlags & HideFlags.HideInHierarchy) != 0 ||
+                (target.hideFlags & HideFlags.NotEditable) != 0)
+            {
+                return true;
+            }
+
+            // Skip known system roots
+            string nameLower = target.name.ToLowerInvariant();
+            foreach (string keyword in ExcludedSystemKeywords)
+            {
+                if (nameLower.Contains(keyword))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void LoadSlotInEditor()
