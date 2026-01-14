@@ -5,7 +5,22 @@
   "id": "com.soph.packages",
   "packages": {
     "com.soph.avatar-outfit-manager": {
-      "versions": {
+        "1.1.0": {
+          "name": "com.soph.avatar-outfit-manager",
+          "displayName": "Soph's Outfit Manager",
+          "version": "1.1.0",
+          "unity": "2022.3",
+          "description": "Major UX Update! Wizard mode, visual slot grid, one-click setup, and presets.",
+          "author": {
+            "name": "Soph"
+          },
+          "vpmDependencies": {
+            "com.vrchat.avatars": ">=3.5.0"
+          },
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.1.0/com.soph.avatar-outfit-manager-1.1.0.zip",
+          "legacyFolders": {},
+          "legacyFiles": {}
+        },
         "1.0.0": {
           "name": "com.soph.avatar-outfit-manager",
           "displayName": "Soph's Outfit Manager",
