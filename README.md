@@ -160,6 +160,12 @@ Or manually:
 
 ## Changelog
 
+### v1.2.0
+- Added dedicated "Soph Outfit Manager" GameObject in hierarchy
+- Improved hierarchy organization (similar to GoGo Loco or SPS)
+- Auto-detection of existing "Soph Outfit Manager" GameObject
+- Updated UI buttons and wizard flow
+
 ### v1.1.1
 - Fixed FX Layer setup for reliable outfit switching
 - Improved animation clip generation
