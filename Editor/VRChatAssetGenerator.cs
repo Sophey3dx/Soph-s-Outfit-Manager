@@ -549,8 +549,9 @@ namespace Soph.AvatarOutfitManager.Editor
             var outfitMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             outfitMenu.controls = new List<VRCExpressionsMenu.Control>();
 
-            // Add individual toggle buttons for each configured outfit
-            // (No Radial Puppet - toggle buttons are more intuitive)
+            // Add individual buttons for each configured outfit
+            // Use Button controls to set the Int parameter value
+            // (Toggle controls only work with Bool parameters, not Int)
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
                 if (slotData.slots[i].isConfigured)
@@ -567,8 +568,9 @@ namespace Soph.AvatarOutfitManager.Editor
                         name = string.IsNullOrEmpty(slotData.slots[i].slotName) 
                             ? $"Outfit {i}" 
                             : slotData.slots[i].slotName,
-                        type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                        type = VRCExpressionsMenu.Control.ControlType.Button,
                         icon = slotIcon,
+                        // Set the Int parameter value on press
                         parameter = new VRCExpressionsMenu.Control.Parameter { name = PARAMETER_NAME },
                         value = i
                     };

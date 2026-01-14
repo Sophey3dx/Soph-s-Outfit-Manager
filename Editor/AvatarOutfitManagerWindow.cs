@@ -885,6 +885,9 @@ namespace Soph.AvatarOutfitManager.Editor
                         EditorUtility.SetDirty(slotData);
                     }
                 }
+                
+                // Update component if it exists
+                UpdateComponentSlotData();
                 return;
             }
 
@@ -918,6 +921,9 @@ namespace Soph.AvatarOutfitManager.Editor
 
                 AssetDatabase.CreateAsset(slotData, assetPath);
                 AssetDatabase.SaveAssets();
+                
+                // Update component if it exists
+                UpdateComponentSlotData();
             }
         }
         
@@ -949,6 +955,9 @@ namespace Soph.AvatarOutfitManager.Editor
                         }
                     }
                     
+                    // Update component if it exists
+                    UpdateComponentSlotData();
+                    
                     Debug.Log($"[Outfit Manager] Loaded existing slot data: {path}");
                     return;
                 }
@@ -973,10 +982,31 @@ namespace Soph.AvatarOutfitManager.Editor
                         }
                         EditorUtility.SetDirty(slotData);
                         AssetDatabase.SaveAssets();
+                        
+                        // Update component if it exists
+                        UpdateComponentSlotData();
+                        
                         Debug.Log($"[Outfit Manager] Loaded slot data by name and updated GUID: {path}");
                         return;
                     }
                 }
+            }
+        }
+
+        private void UpdateComponentSlotData()
+        {
+            if (avatarDescriptor == null) return;
+            
+            // Find OutfitManagerComponent in hierarchy
+            OutfitManagerComponent component = avatarDescriptor.GetComponentInChildren<OutfitManagerComponent>();
+            if (component != null)
+            {
+                component.SlotData = slotData;
+                if (outfitRoot != null)
+                {
+                    component.OutfitRoot = outfitRoot;
+                }
+                EditorUtility.SetDirty(component);
             }
         }
         
@@ -1098,6 +1128,9 @@ namespace Soph.AvatarOutfitManager.Editor
 
             EditorUtility.SetDirty(slotData);
             AssetDatabase.SaveAssets();
+            
+            // Update component if it exists
+            UpdateComponentSlotData();
 
             Debug.Log($"[Outfit Manager] Saved {currentSlot.objectStates.Count} objects to slot {selectedSlotIndex}");
         }
@@ -1329,6 +1362,20 @@ namespace Soph.AvatarOutfitManager.Editor
                 if (child.name.Equals(GameObjectName, System.StringComparison.OrdinalIgnoreCase))
                 {
                     outfitRoot = child;
+                    
+                    // Ensure component is attached
+                    OutfitManagerComponent component = child.GetComponent<OutfitManagerComponent>();
+                    if (component == null)
+                    {
+                        component = child.gameObject.AddComponent<OutfitManagerComponent>();
+                        component.OutfitRoot = outfitRoot;
+                        if (slotData != null)
+                        {
+                            component.SlotData = slotData;
+                        }
+                        EditorUtility.SetDirty(component);
+                    }
+                    
                     // Select it in hierarchy for visibility
                     Selection.activeGameObject = child.gameObject;
                     EditorGUIUtility.PingObject(child.gameObject);
@@ -1343,6 +1390,14 @@ namespace Soph.AvatarOutfitManager.Editor
             outfitManagerGO.transform.localRotation = Quaternion.identity;
             outfitManagerGO.transform.localScale = Vector3.one;
 
+            // Add OutfitManagerComponent
+            OutfitManagerComponent newComponent = outfitManagerGO.AddComponent<OutfitManagerComponent>();
+            newComponent.OutfitRoot = outfitManagerGO.transform;
+            if (slotData != null)
+            {
+                newComponent.SlotData = slotData;
+            }
+
             // Register undo
             Undo.RegisterCreatedObjectUndo(outfitManagerGO, "Create Soph Outfit Manager");
 
@@ -1352,7 +1407,7 @@ namespace Soph.AvatarOutfitManager.Editor
             Selection.activeGameObject = outfitManagerGO;
             EditorGUIUtility.PingObject(outfitManagerGO);
 
-            Debug.Log($"[Outfit Manager] Created '{GameObjectName}' GameObject in hierarchy. Drag your clothing items here!");
+            Debug.Log($"[Outfit Manager] Created '{GameObjectName}' GameObject in hierarchy with component. Drag your clothing items here!");
         }
 
         private int CountToggleableObjects(Transform root)
