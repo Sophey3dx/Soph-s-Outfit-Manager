@@ -42,9 +42,10 @@ namespace Soph.AvatarOutfitManager.Editor
             "Default", "Casual", "Formal", "Sporty", "Beach", "Night Out" 
         };
 
-        // Auto-detect folder names
+        // Auto-detect folder names (Soph Outfit Manager has priority)
         private static readonly string[] OutfitFolderNames = 
         {
+            "Soph Outfit Manager",  // Priority: Our own GameObject first
             "Clothing", "Clothes", "Outfits", "Outfit", "Accessories",
             "Toggles", "Toggle", "Wearables", "Apparel", "Garments"
         };
@@ -346,7 +347,7 @@ namespace Soph.AvatarOutfitManager.Editor
         private void DrawWizardStep2()
         {
             EditorGUILayout.LabelField("Step 2 of 3", centeredLabelStyle);
-            EditorGUILayout.LabelField("Outfit Folder", wizardHeaderStyle);
+            EditorGUILayout.LabelField("Soph Outfit Manager GameObject", wizardHeaderStyle);
             EditorGUILayout.Space(10);
 
             if (outfitRoot != null)
@@ -364,7 +365,7 @@ namespace Soph.AvatarOutfitManager.Editor
 
                 EditorGUILayout.Space(5);
 
-                if (GUILayout.Button("Choose Different Folder"))
+                if (GUILayout.Button("Choose Different"))
                 {
                     outfitRoot = null;
                 }
@@ -372,14 +373,14 @@ namespace Soph.AvatarOutfitManager.Editor
             else
             {
                 EditorGUILayout.HelpBox(
-                    "No outfit folder found. You can create one or select manually.",
+                    "No outfit folder found. Create the 'Soph Outfit Manager' GameObject or select manually.",
                     MessageType.Warning);
 
                 EditorGUILayout.Space(10);
 
-                if (GUILayout.Button("Create 'Outfits' Folder", GUILayout.Height(35)))
+                if (GUILayout.Button("Create 'Soph Outfit Manager' GameObject", GUILayout.Height(35)))
                 {
-                    CreateOutfitRootFolder();
+                    CreateSophOutfitManagerGameObject();
                     if (outfitRoot != null)
                     {
                         currentWizardStep = WizardStep.Ready;
@@ -388,7 +389,7 @@ namespace Soph.AvatarOutfitManager.Editor
 
                 EditorGUILayout.Space(5);
 
-                EditorGUILayout.LabelField("Or select existing folder:", centeredLabelStyle);
+                EditorGUILayout.LabelField("Or select existing GameObject:", centeredLabelStyle);
                 var newRoot = EditorGUILayout.ObjectField(outfitRoot, typeof(Transform), true) as Transform;
                 if (newRoot != null)
                 {
@@ -515,7 +516,7 @@ namespace Soph.AvatarOutfitManager.Editor
             // If no outfit root found, create one
             if (outfitRoot == null)
             {
-                CreateOutfitRootFolder();
+                CreateSophOutfitManagerGameObject();
             }
 
             // Try to load existing slot data, otherwise create new
@@ -559,7 +560,7 @@ namespace Soph.AvatarOutfitManager.Editor
                     }
                     if (GUILayout.Button("+", GUILayout.Width(25)))
                     {
-                        CreateOutfitRootFolder();
+                        CreateSophOutfitManagerGameObject();
                     }
                     EditorGUILayout.EndHorizontal();
                 }
@@ -1322,34 +1323,42 @@ namespace Soph.AvatarOutfitManager.Editor
             }
         }
 
-        private void CreateOutfitRootFolder()
+        private void CreateSophOutfitManagerGameObject()
         {
             if (avatarDescriptor == null) return;
 
-            // Check existing
+            const string GameObjectName = "Soph Outfit Manager";
+
+            // Check if already exists
             foreach (Transform child in avatarDescriptor.transform)
             {
-                if (child.name.Equals("Outfits", System.StringComparison.OrdinalIgnoreCase))
+                if (child.name.Equals(GameObjectName, System.StringComparison.OrdinalIgnoreCase))
                 {
                     outfitRoot = child;
+                    // Select it in hierarchy for visibility
+                    Selection.activeGameObject = child.gameObject;
+                    EditorGUIUtility.PingObject(child.gameObject);
                     return;
                 }
             }
 
-            // Create new
-            GameObject outfitFolder = new GameObject("Outfits");
-            outfitFolder.transform.SetParent(avatarDescriptor.transform);
-            outfitFolder.transform.localPosition = Vector3.zero;
-            outfitFolder.transform.localRotation = Quaternion.identity;
-            outfitFolder.transform.localScale = Vector3.one;
+            // Create new GameObject
+            GameObject outfitManagerGO = new GameObject(GameObjectName);
+            outfitManagerGO.transform.SetParent(avatarDescriptor.transform);
+            outfitManagerGO.transform.localPosition = Vector3.zero;
+            outfitManagerGO.transform.localRotation = Quaternion.identity;
+            outfitManagerGO.transform.localScale = Vector3.one;
 
-            Undo.RegisterCreatedObjectUndo(outfitFolder, "Create Outfit Folder");
-            outfitRoot = outfitFolder.transform;
+            // Register undo
+            Undo.RegisterCreatedObjectUndo(outfitManagerGO, "Create Soph Outfit Manager");
 
-            EditorUtility.DisplayDialog(
-                "Folder Created",
-                "Created 'Outfits' folder. Drag your clothing items into it!",
-                "OK");
+            outfitRoot = outfitManagerGO.transform;
+
+            // Select and ping in hierarchy
+            Selection.activeGameObject = outfitManagerGO;
+            EditorGUIUtility.PingObject(outfitManagerGO);
+
+            Debug.Log($"[Outfit Manager] Created '{GameObjectName}' GameObject in hierarchy. Drag your clothing items here!");
         }
 
         private int CountToggleableObjects(Transform root)
