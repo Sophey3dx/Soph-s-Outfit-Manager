@@ -8,15 +8,12 @@ namespace Soph.AvatarOutfitManager.Editor
 {
     /// <summary>
     /// Main Editor Window for the Avatar Outfit Manager.
-    /// Accessible via Tools > Soph's Outfit Manager.
-    /// 
-    /// This tool allows users to:
-    /// - Save current outfit visibility states to slots
-    /// - Preview saved outfits in the Editor
-    /// - Generate all required VRChat assets (AnimationClips, FX Layer, Parameters, Menu)
+    /// Features: One-Click Setup, Wizard Mode, Visual Slots, Tooltips, Presets
     /// </summary>
     public class AvatarOutfitManagerWindow : EditorWindow
     {
+        #region Fields
+
         // References
         private VRCAvatarDescriptor avatarDescriptor;
         private Transform outfitRoot;
@@ -27,480 +24,799 @@ namespace Soph.AvatarOutfitManager.Editor
         private Vector2 scrollPosition;
         private string outputFolderPath = "Assets/AvatarOutfitManager/Generated";
 
+        // Wizard State
+        private enum WizardStep { None, Avatar, OutfitRoot, Ready }
+        private WizardStep currentWizardStep = WizardStep.None;
+        private bool showWizard = false;
+        private bool isFirstTimeUser = true;
+
         // Icon Rendering Settings
         private bool showIconSettings = false;
         private IconCameraSettings iconCameraSettings = new IconCameraSettings();
         private int selectedCameraPreset = 0;
         private readonly string[] cameraPresetNames = { "Custom", "Portrait", "Full Body", "3/4 View" };
 
+        // Preset Names
+        private static readonly string[] PresetSlotNames = 
+        { 
+            "Default", "Casual", "Formal", "Sporty", "Beach", "Night Out" 
+        };
+
+        // Auto-detect folder names
+        private static readonly string[] OutfitFolderNames = 
+        {
+            "Clothing", "Clothes", "Outfits", "Outfit", "Accessories",
+            "Toggles", "Toggle", "Wearables", "Apparel", "Garments"
+        };
+
+        private static readonly string[] ExcludedNames = 
+        {
+            "Armature", "Body", "Head", "Hair", "Eyes", "Teeth", "Tongue"
+        };
+
         // Styles
         private GUIStyle headerStyle;
-        private GUIStyle slotButtonStyle;
-        private GUIStyle selectedSlotStyle;
-        private GUIStyle configuredSlotStyle;
+        private GUIStyle wizardHeaderStyle;
+        private GUIStyle slotCardStyle;
+        private GUIStyle selectedSlotCardStyle;
+        private GUIStyle dropAreaStyle;
+        private GUIStyle centeredLabelStyle;
         private bool stylesInitialized = false;
+
+        // Tooltips
+        private static class Tips
+        {
+            public static readonly GUIContent Avatar = new GUIContent(
+                "Avatar", "The VRChat avatar you want to add outfits to. Must have a VRC Avatar Descriptor.");
+            public static readonly GUIContent OutfitRoot = new GUIContent(
+                "Outfit Root", "The folder containing all your clothing/accessory GameObjects that can be toggled.");
+            public static readonly GUIContent SlotData = new GUIContent(
+                "Slot Data", "Asset file that stores your outfit configurations. Auto-created if needed.");
+            public static readonly GUIContent OutputFolder = new GUIContent(
+                "Output Folder", "Where generated VRChat assets (animations, menus) will be saved.");
+            public static readonly GUIContent SaveSlot = new GUIContent(
+                "Save Current Visibility", "Saves which clothing items are currently visible as this outfit.");
+            public static readonly GUIContent LoadSlot = new GUIContent(
+                "Load in Editor", "Preview this outfit by applying its visibility settings in the Scene.");
+            public static readonly GUIContent Generate = new GUIContent(
+                "Generate VRChat Assets", "Creates all files needed for in-game outfit switching.");
+            public static readonly GUIContent RenderIcon = new GUIContent(
+                "Render Icon", "Takes a screenshot of the current outfit for the VRChat menu.");
+            public static readonly GUIContent ApplyPresets = new GUIContent(
+                "Apply Preset Names", "Fills slot names with: Default, Casual, Formal, Sporty, Beach, Night Out");
+        }
+
+        #endregion
+
+        #region Window Setup
 
         [MenuItem("Tools/Soph's Outfit Manager")]
         public static void ShowWindow()
         {
             var window = GetWindow<AvatarOutfitManagerWindow>();
-            window.titleContent = new GUIContent("Outfit Manager");
-            window.minSize = new Vector2(400, 500);
+            window.titleContent = new GUIContent("Outfit Manager", EditorGUIUtility.IconContent("ClothInspector.SettingsTool").image);
+            window.minSize = new Vector2(450, 550);
             window.Show();
+        }
+
+        private void OnEnable()
+        {
+            // Check if first time user
+            isFirstTimeUser = !EditorPrefs.HasKey("SophOutfitManager_NotFirstTime");
+            if (isFirstTimeUser)
+            {
+                showWizard = true;
+                currentWizardStep = WizardStep.Avatar;
+            }
         }
 
         private void InitializeStyles()
         {
-            if (stylesInitialized) return;
+            if (stylesInitialized && headerStyle != null) return;
 
             headerStyle = new GUIStyle(EditorStyles.boldLabel)
             {
-                fontSize = 14,
-                margin = new RectOffset(0, 0, 10, 10)
+                fontSize = 16,
+                alignment = TextAnchor.MiddleCenter,
+                margin = new RectOffset(0, 0, 10, 5)
             };
 
-            slotButtonStyle = new GUIStyle(GUI.skin.button)
+            wizardHeaderStyle = new GUIStyle(EditorStyles.boldLabel)
             {
-                fixedHeight = 40,
-                fontSize = 12,
-                fontStyle = FontStyle.Normal
+                fontSize = 20,
+                alignment = TextAnchor.MiddleCenter,
+                margin = new RectOffset(0, 0, 20, 10)
             };
 
-            selectedSlotStyle = new GUIStyle(GUI.skin.button)
+            slotCardStyle = new GUIStyle(GUI.skin.button)
             {
-                fixedHeight = 40,
-                fontSize = 12,
+                fixedHeight = 90,
+                fixedWidth = 90,
+                fontSize = 10,
+                alignment = TextAnchor.LowerCenter,
+                imagePosition = ImagePosition.ImageAbove,
+                padding = new RectOffset(5, 5, 5, 5)
+            };
+
+            selectedSlotCardStyle = new GUIStyle(slotCardStyle)
+            {
                 fontStyle = FontStyle.Bold
             };
 
-            configuredSlotStyle = new GUIStyle(GUI.skin.button)
+            dropAreaStyle = new GUIStyle(GUI.skin.box)
             {
-                fixedHeight = 40,
-                fontSize = 12,
-                fontStyle = FontStyle.Italic
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                normal = { textColor = new Color(0.7f, 0.7f, 0.7f) }
+            };
+
+            centeredLabelStyle = new GUIStyle(EditorStyles.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true
             };
 
             stylesInitialized = true;
         }
 
+        #endregion
+
+        #region Main GUI
+
         private void OnGUI()
         {
             InitializeStyles();
 
+            // Handle Drag & Drop anywhere in window
+            HandleDragAndDrop();
+
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-            DrawHeader();
-            EditorGUILayout.Space(10);
-
-            DrawAvatarConfiguration();
-            EditorGUILayout.Space(10);
-
-            if (avatarDescriptor != null && outfitRoot != null)
+            if (showWizard && avatarDescriptor == null)
             {
-                DrawSlotSelector();
-                EditorGUILayout.Space(10);
-
-                DrawSlotDetails();
-                EditorGUILayout.Space(10);
-
-                DrawSlotActions();
-                EditorGUILayout.Space(10);
-
-                DrawIconRendering();
-                EditorGUILayout.Space(20);
-
-                DrawAssetGeneration();
+                DrawWizard();
             }
             else
             {
-                EditorGUILayout.HelpBox(
-                    "Please assign an Avatar with VRC Avatar Descriptor and an Outfit Root to begin.",
-                    MessageType.Info);
+                DrawMainInterface();
             }
 
             EditorGUILayout.EndScrollView();
         }
 
-        private void DrawHeader()
+        private void DrawMainInterface()
         {
-            EditorGUILayout.LabelField("Soph's Outfit Manager", headerStyle);
-            EditorGUILayout.LabelField("Save and manage outfit presets for VRChat avatars", EditorStyles.miniLabel);
+            DrawHeader();
+            EditorGUILayout.Space(5);
+
+            // Quick Setup Section (if not fully configured)
+            if (avatarDescriptor == null || outfitRoot == null)
+            {
+                DrawQuickSetup();
+            }
+            else
+            {
+                // Compact config display
+                DrawCompactConfig();
+                EditorGUILayout.Space(10);
+
+                // Visual Slot Grid
+                DrawVisualSlotGrid();
+                EditorGUILayout.Space(10);
+
+                // Selected Slot Details
+                DrawSelectedSlotDetails();
+                EditorGUILayout.Space(10);
+
+                // Actions
+                DrawQuickActions();
+                EditorGUILayout.Space(10);
+
+                // Generate Section
+                DrawGenerateSection();
+            }
+
+            EditorGUILayout.Space(20);
         }
 
-        private void DrawAvatarConfiguration()
+        #endregion
+
+        #region Wizard Mode
+
+        private void DrawWizard()
         {
-            EditorGUILayout.LabelField("Avatar Configuration", EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                // Avatar Descriptor
-                var newDescriptor = EditorGUILayout.ObjectField(
-                    "Avatar",
-                    avatarDescriptor,
-                    typeof(VRCAvatarDescriptor),
-                    true) as VRCAvatarDescriptor;
+                EditorGUILayout.Space(10);
 
-                if (newDescriptor != avatarDescriptor)
+                switch (currentWizardStep)
                 {
-                    avatarDescriptor = newDescriptor;
-                    OnAvatarChanged();
+                    case WizardStep.Avatar:
+                        DrawWizardStep1();
+                        break;
+                    case WizardStep.OutfitRoot:
+                        DrawWizardStep2();
+                        break;
+                    case WizardStep.Ready:
+                        DrawWizardStep3();
+                        break;
                 }
 
-                // Outfit Root
-                EditorGUILayout.BeginHorizontal();
-                var newOutfitRoot = EditorGUILayout.ObjectField(
-                    "Outfit Root",
-                    outfitRoot,
-                    typeof(Transform),
-                    true) as Transform;
+                EditorGUILayout.Space(10);
+            }
 
-                // Auto-Detect Button
-                GUI.enabled = avatarDescriptor != null;
-                if (GUILayout.Button("Auto", GUILayout.Width(45)))
+            GUILayout.FlexibleSpace();
+
+            // Skip wizard button
+            EditorGUILayout.Space(10);
+            if (GUILayout.Button("Skip Setup Wizard", EditorStyles.miniButton))
+            {
+                showWizard = false;
+                MarkNotFirstTime();
+            }
+        }
+
+        private void DrawWizardStep1()
+        {
+            EditorGUILayout.LabelField("Step 1 of 3", centeredLabelStyle);
+            EditorGUILayout.LabelField("Select Your Avatar", wizardHeaderStyle);
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField("Drag your avatar from the Hierarchy here:", centeredLabelStyle);
+            EditorGUILayout.Space(10);
+
+            // Drop Area
+            Rect dropArea = GUILayoutUtility.GetRect(0, 80, GUILayout.ExpandWidth(true));
+            GUI.Box(dropArea, "Drop Avatar Here\nor click to select", dropAreaStyle);
+
+            // Handle drop in this area
+            if (dropArea.Contains(Event.current.mousePosition))
+            {
+                if (Event.current.type == EventType.DragUpdated)
                 {
+                    DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.DragPerform)
+                {
+                    DragAndDrop.AcceptDrag();
+                    foreach (var obj in DragAndDrop.objectReferences)
+                    {
+                        var go = obj as GameObject;
+                        if (go != null)
+                        {
+                            var descriptor = go.GetComponent<VRCAvatarDescriptor>();
+                            if (descriptor != null)
+                            {
+                                avatarDescriptor = descriptor;
+                                currentWizardStep = WizardStep.OutfitRoot;
+                                AutoDetectOutfitRoot();
+                                Repaint();
+                            }
+                        }
+                    }
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.MouseDown)
+                {
+                    // Show object picker
+                    EditorGUIUtility.ShowObjectPicker<VRCAvatarDescriptor>(null, true, "", 0);
+                    Event.current.Use();
+                }
+            }
+
+            // Handle object picker
+            if (Event.current.commandName == "ObjectSelectorUpdated")
+            {
+                var selected = EditorGUIUtility.GetObjectPickerObject() as VRCAvatarDescriptor;
+                if (selected != null)
+                {
+                    avatarDescriptor = selected;
+                    currentWizardStep = WizardStep.OutfitRoot;
                     AutoDetectOutfitRoot();
+                    Repaint();
                 }
-                if (GUILayout.Button("+", GUILayout.Width(25)))
+            }
+
+            EditorGUILayout.Space(10);
+
+            // Or select from scene
+            EditorGUILayout.LabelField("Or select from scene:", centeredLabelStyle);
+            var newDescriptor = EditorGUILayout.ObjectField(avatarDescriptor, typeof(VRCAvatarDescriptor), true) as VRCAvatarDescriptor;
+            if (newDescriptor != null && newDescriptor != avatarDescriptor)
+            {
+                avatarDescriptor = newDescriptor;
+                currentWizardStep = WizardStep.OutfitRoot;
+                AutoDetectOutfitRoot();
+            }
+        }
+
+        private void DrawWizardStep2()
+        {
+            EditorGUILayout.LabelField("Step 2 of 3", centeredLabelStyle);
+            EditorGUILayout.LabelField("Outfit Folder", wizardHeaderStyle);
+            EditorGUILayout.Space(10);
+
+            if (outfitRoot != null)
+            {
+                EditorGUILayout.HelpBox(
+                    $"Found: '{outfitRoot.name}' with {CountToggleableObjects(outfitRoot)} items",
+                    MessageType.Info);
+
+                EditorGUILayout.Space(5);
+
+                if (GUILayout.Button("Use This Folder", GUILayout.Height(35)))
+                {
+                    currentWizardStep = WizardStep.Ready;
+                }
+
+                EditorGUILayout.Space(5);
+
+                if (GUILayout.Button("Choose Different Folder"))
+                {
+                    outfitRoot = null;
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "No outfit folder found. You can create one or select manually.",
+                    MessageType.Warning);
+
+                EditorGUILayout.Space(10);
+
+                if (GUILayout.Button("Create 'Outfits' Folder", GUILayout.Height(35)))
                 {
                     CreateOutfitRootFolder();
-                }
-                GUI.enabled = true;
-                EditorGUILayout.EndHorizontal();
-
-                if (newOutfitRoot != outfitRoot)
-                {
-                    outfitRoot = newOutfitRoot;
-                    ValidateOutfitRoot();
-                }
-
-                // Show info about outfit root
-                if (outfitRoot == null && avatarDescriptor != null)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Click 'Auto' to auto-detect or '+' to create a new Outfit folder.",
-                        MessageType.Info);
-                }
-                else if (outfitRoot != null && avatarDescriptor != null)
-                {
-                    if (!outfitRoot.IsChildOf(avatarDescriptor.transform))
+                    if (outfitRoot != null)
                     {
-                        EditorGUILayout.HelpBox(
-                            "Outfit Root must be a child of the selected Avatar!",
-                            MessageType.Error);
-                    }
-                    else
-                    {
-                        int childCount = CountToggleableObjects(outfitRoot);
-                        EditorGUILayout.HelpBox(
-                            $"Found {childCount} toggleable objects under '{outfitRoot.name}'",
-                            MessageType.None);
+                        currentWizardStep = WizardStep.Ready;
                     }
                 }
 
-                // Slot Data
                 EditorGUILayout.Space(5);
-                slotData = EditorGUILayout.ObjectField(
-                    "Slot Data",
-                    slotData,
-                    typeof(OutfitSlotData),
-                    false) as OutfitSlotData;
 
-                if (slotData == null)
+                EditorGUILayout.LabelField("Or select existing folder:", centeredLabelStyle);
+                var newRoot = EditorGUILayout.ObjectField(outfitRoot, typeof(Transform), true) as Transform;
+                if (newRoot != null)
                 {
-                    EditorGUILayout.HelpBox(
-                        "No Slot Data assigned. Create one or it will be auto-created when saving.",
-                        MessageType.Info);
-
-                    if (GUILayout.Button("Create New Slot Data"))
-                    {
-                        CreateNewSlotData();
-                    }
+                    outfitRoot = newRoot;
+                    currentWizardStep = WizardStep.Ready;
                 }
+            }
 
-                // Output Folder
-                EditorGUILayout.Space(5);
-                EditorGUILayout.BeginHorizontal();
-                outputFolderPath = EditorGUILayout.TextField("Output Folder", outputFolderPath);
-                if (GUILayout.Button("...", GUILayout.Width(30)))
-                {
-                    string selected = EditorUtility.OpenFolderPanel("Select Output Folder", "Assets", "");
-                    if (!string.IsNullOrEmpty(selected))
-                    {
-                        // Convert to relative path
-                        if (selected.StartsWith(Application.dataPath))
-                        {
-                            outputFolderPath = "Assets" + selected.Substring(Application.dataPath.Length);
-                        }
-                    }
-                }
-                EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(10);
+            if (GUILayout.Button("< Back"))
+            {
+                currentWizardStep = WizardStep.Avatar;
             }
         }
 
-        private void DrawSlotSelector()
+        private void DrawWizardStep3()
         {
-            EditorGUILayout.LabelField("Outfit Slots", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Step 3 of 3", centeredLabelStyle);
+            EditorGUILayout.LabelField("Ready!", wizardHeaderStyle);
+            EditorGUILayout.Space(10);
 
+            EditorGUILayout.HelpBox(
+                $"Avatar: {avatarDescriptor.gameObject.name}\n" +
+                $"Outfit Folder: {outfitRoot.name}\n" +
+                $"Toggleable Items: {CountToggleableObjects(outfitRoot)}",
+                MessageType.Info);
+
+            EditorGUILayout.Space(10);
+
+            // Apply preset names option
+            EditorGUILayout.LabelField("Would you like preset slot names?", centeredLabelStyle);
+            EditorGUILayout.Space(5);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Yes, Apply Presets", GUILayout.Height(30)))
+            {
+                EnsureSlotData();
+                ApplyPresetNames();
+                FinishWizard();
+            }
+            if (GUILayout.Button("No, Custom Names", GUILayout.Height(30)))
+            {
+                EnsureSlotData();
+                FinishWizard();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(10);
+            if (GUILayout.Button("< Back"))
+            {
+                currentWizardStep = WizardStep.OutfitRoot;
+            }
+        }
+
+        private void FinishWizard()
+        {
+            showWizard = false;
+            MarkNotFirstTime();
+            Repaint();
+        }
+
+        private void MarkNotFirstTime()
+        {
+            EditorPrefs.SetBool("SophOutfitManager_NotFirstTime", true);
+            isFirstTimeUser = false;
+        }
+
+        #endregion
+
+        #region Quick Setup & Drag-Drop
+
+        private void HandleDragAndDrop()
+        {
+            if (Event.current.type == EventType.DragUpdated || Event.current.type == EventType.DragPerform)
+            {
+                // Check if dragging a valid avatar
+                bool hasValidAvatar = false;
+                foreach (var obj in DragAndDrop.objectReferences)
+                {
+                    var go = obj as GameObject;
+                    if (go != null && go.GetComponent<VRCAvatarDescriptor>() != null)
+                    {
+                        hasValidAvatar = true;
+                        break;
+                    }
+                }
+
+                if (hasValidAvatar)
+                {
+                    if (Event.current.type == EventType.DragUpdated)
+                    {
+                        DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+                    }
+                    else if (Event.current.type == EventType.DragPerform)
+                    {
+                        DragAndDrop.AcceptDrag();
+                        foreach (var obj in DragAndDrop.objectReferences)
+                        {
+                            var go = obj as GameObject;
+                            if (go != null)
+                            {
+                                var descriptor = go.GetComponent<VRCAvatarDescriptor>();
+                                if (descriptor != null)
+                                {
+                                    OneClickSetup(go);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Event.current.Use();
+                }
+            }
+        }
+
+        private void OneClickSetup(GameObject avatarGO)
+        {
+            avatarDescriptor = avatarGO.GetComponent<VRCAvatarDescriptor>();
+            if (avatarDescriptor == null) return;
+
+            // Auto-detect outfit root
+            AutoDetectOutfitRoot();
+
+            // If no outfit root found, create one
+            if (outfitRoot == null)
+            {
+                CreateOutfitRootFolder();
+            }
+
+            // Ensure slot data exists
+            EnsureSlotData();
+
+            showWizard = false;
+            MarkNotFirstTime();
+
+            Debug.Log($"[Outfit Manager] One-Click Setup complete for: {avatarGO.name}");
+        }
+
+        private void DrawQuickSetup()
+        {
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Quick Setup", headerStyle);
+                EditorGUILayout.Space(5);
 
-                for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
+                // Drop area
+                Rect dropArea = GUILayoutUtility.GetRect(0, 60, GUILayout.ExpandWidth(true));
+                GUI.Box(dropArea, "Drop Avatar Here", dropAreaStyle);
+
+                EditorGUILayout.Space(10);
+
+                // Manual fields
+                avatarDescriptor = EditorGUILayout.ObjectField(Tips.Avatar, avatarDescriptor, typeof(VRCAvatarDescriptor), true) as VRCAvatarDescriptor;
+
+                if (avatarDescriptor != null)
                 {
-                    bool isSelected = (i == selectedSlotIndex);
-                    bool isConfigured = slotData != null && 
-                                       slotData.slots != null && 
-                                       slotData.slots[i] != null && 
-                                       slotData.slots[i].isConfigured;
-
-                    GUIStyle style = isSelected ? selectedSlotStyle : 
-                                    (isConfigured ? configuredSlotStyle : slotButtonStyle);
-
-                    string slotLabel = i.ToString();
-                    if (isConfigured && slotData.slots[i] != null)
+                    EditorGUILayout.BeginHorizontal();
+                    outfitRoot = EditorGUILayout.ObjectField(Tips.OutfitRoot, outfitRoot, typeof(Transform), true) as Transform;
+                    if (GUILayout.Button("Auto", GUILayout.Width(45)))
                     {
-                        string name = slotData.slots[i].slotName;
-                        if (!string.IsNullOrEmpty(name) && name.Length > 8)
-                        {
-                            name = name.Substring(0, 8) + "...";
-                        }
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            slotLabel = $"{i}\n{name}";
-                        }
+                        AutoDetectOutfitRoot();
                     }
-
-                    GUI.backgroundColor = isSelected ? Color.cyan : 
-                                         (isConfigured ? Color.green : Color.white);
-
-                    if (GUILayout.Button(slotLabel, style, GUILayout.Width(60)))
+                    if (GUILayout.Button("+", GUILayout.Width(25)))
                     {
-                        selectedSlotIndex = i;
+                        CreateOutfitRootFolder();
                     }
+                    EditorGUILayout.EndHorizontal();
                 }
 
-                GUI.backgroundColor = Color.white;
-                EditorGUILayout.EndHorizontal();
-
-                // Legend
                 EditorGUILayout.Space(5);
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("● Selected", EditorStyles.miniLabel, GUILayout.Width(80));
-                EditorGUILayout.LabelField("● Configured", EditorStyles.miniLabel, GUILayout.Width(80));
-                EditorGUILayout.LabelField("○ Empty", EditorStyles.miniLabel, GUILayout.Width(80));
-                EditorGUILayout.EndHorizontal();
+
+                if (GUILayout.Button("Start Setup Wizard"))
+                {
+                    showWizard = true;
+                    currentWizardStep = WizardStep.Avatar;
+                }
             }
         }
 
-        private void DrawSlotDetails()
+        private void DrawCompactConfig()
+        {
+            using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField($"Avatar: {avatarDescriptor.gameObject.name}", GUILayout.Width(150));
+                EditorGUILayout.LabelField($"Outfits: {outfitRoot.name} ({CountToggleableObjects(outfitRoot)} items)");
+                
+                if (GUILayout.Button("Change", GUILayout.Width(60)))
+                {
+                    avatarDescriptor = null;
+                    outfitRoot = null;
+                }
+            }
+        }
+
+        #endregion
+
+        #region Visual Slot Grid
+
+        private void DrawVisualSlotGrid()
+        {
+            EditorGUILayout.LabelField("Outfit Slots", headerStyle);
+
+            // Preset button
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button(Tips.ApplyPresets, GUILayout.Width(130)))
+            {
+                EnsureSlotData();
+                ApplyPresetNames();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(5);
+
+            EnsureSlotData();
+
+            // Draw 2x3 grid of slot cards
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                for (int row = 0; row < 2; row++)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.FlexibleSpace();
+                    
+                    for (int col = 0; col < 3; col++)
+                    {
+                        int slotIndex = row * 3 + col;
+                        DrawSlotCard(slotIndex);
+                        GUILayout.Space(10);
+                    }
+                    
+                    GUILayout.FlexibleSpace();
+                    EditorGUILayout.EndHorizontal();
+                    
+                    if (row < 1) GUILayout.Space(10);
+                }
+            }
+        }
+
+        private void DrawSlotCard(int slotIndex)
+        {
+            if (slotData == null || slotData.slots == null) return;
+
+            var slot = slotData.slots[slotIndex];
+            bool isSelected = slotIndex == selectedSlotIndex;
+            bool isConfigured = slot != null && slot.isConfigured;
+
+            // Card background color
+            Color bgColor = isSelected ? new Color(0.3f, 0.6f, 0.9f, 0.5f) :
+                           isConfigured ? new Color(0.3f, 0.8f, 0.3f, 0.3f) :
+                           new Color(0.5f, 0.5f, 0.5f, 0.2f);
+
+            Color oldBg = GUI.backgroundColor;
+            GUI.backgroundColor = bgColor;
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox, GUILayout.Width(100), GUILayout.Height(100)))
+            {
+                GUI.backgroundColor = oldBg;
+
+                // Icon or placeholder
+                Rect iconRect = GUILayoutUtility.GetRect(60, 50);
+                iconRect.x += (100 - 60) / 2 - 10;
+
+                Texture2D icon = slot?.GetIcon();
+                if (icon != null)
+                {
+                    GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit);
+                }
+                else
+                {
+                    EditorGUI.LabelField(iconRect, isConfigured ? "✓" : "?", new GUIStyle(EditorStyles.boldLabel) 
+                    { 
+                        fontSize = 24, 
+                        alignment = TextAnchor.MiddleCenter 
+                    });
+                }
+
+                // Slot name
+                string displayName = string.IsNullOrEmpty(slot?.slotName) ? $"Slot {slotIndex}" : slot.slotName;
+                if (displayName.Length > 10) displayName = displayName.Substring(0, 10) + "...";
+                
+                EditorGUILayout.LabelField(displayName, new GUIStyle(EditorStyles.miniLabel) 
+                { 
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = isSelected ? FontStyle.Bold : FontStyle.Normal
+                });
+
+                // Status
+                string status = isConfigured ? "Configured" : "Empty";
+                EditorGUILayout.LabelField(status, new GUIStyle(EditorStyles.miniLabel) 
+                { 
+                    alignment = TextAnchor.MiddleCenter,
+                    normal = { textColor = isConfigured ? Color.green : Color.gray }
+                });
+            }
+
+            // Handle click
+            Rect cardRect = GUILayoutUtility.GetLastRect();
+            if (Event.current.type == EventType.MouseDown && cardRect.Contains(Event.current.mousePosition))
+            {
+                selectedSlotIndex = slotIndex;
+                Event.current.Use();
+                Repaint();
+            }
+        }
+
+        #endregion
+
+        #region Selected Slot Details
+
+        private void DrawSelectedSlotDetails()
         {
             if (slotData == null || slotData.slots == null) return;
 
             var currentSlot = slotData.slots[selectedSlotIndex];
             if (currentSlot == null) return;
 
-            EditorGUILayout.LabelField($"Slot {selectedSlotIndex} Details", EditorStyles.boldLabel);
-
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                // Slot name
-                string newName = EditorGUILayout.TextField("Slot Name", currentSlot.slotName);
+                EditorGUILayout.LabelField($"Slot {selectedSlotIndex} Settings", EditorStyles.boldLabel);
+                EditorGUILayout.Space(5);
+
+                // Slot name with tooltip
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Name:", GUILayout.Width(50));
+                string newName = EditorGUILayout.TextField(currentSlot.slotName);
                 if (newName != currentSlot.slotName)
                 {
                     Undo.RecordObject(slotData, "Change Slot Name");
                     currentSlot.slotName = newName;
                     EditorUtility.SetDirty(slotData);
                 }
+                EditorGUILayout.EndHorizontal();
 
                 // Status
-                string statusText = currentSlot.isConfigured ? 
-                    $"Configured ({currentSlot.objectStates?.Count ?? 0} objects)" : 
-                    "Not configured";
-                EditorGUILayout.LabelField("Status", statusText);
+                EditorGUILayout.LabelField(currentSlot.isConfigured ? 
+                    $"Status: Configured ({currentSlot.objectStates?.Count ?? 0} objects)" : 
+                    "Status: Not configured");
 
-                // Show object states if configured
-                if (currentSlot.isConfigured && currentSlot.objectStates != null && currentSlot.objectStates.Count > 0)
-                {
-                    EditorGUILayout.Space(5);
-                    EditorGUILayout.LabelField("Saved Objects:", EditorStyles.miniLabel);
-
-                    int activeCount = 0;
-                    int inactiveCount = 0;
-
-                    foreach (var state in currentSlot.objectStates)
-                    {
-                        if (state.isActive) activeCount++;
-                        else inactiveCount++;
-                    }
-
-                    EditorGUILayout.LabelField($"  Active: {activeCount}  |  Inactive: {inactiveCount}", 
-                        EditorStyles.miniLabel);
-                }
-
-                // Icon Preview
                 EditorGUILayout.Space(10);
-                EditorGUILayout.LabelField("Slot Icon:", EditorStyles.miniLabel);
-                
-                EditorGUILayout.BeginHorizontal();
-                
-                // Show icon if available
-                var icon = currentSlot.GetIcon();
-                if (icon != null)
-                {
-                    GUILayout.Box(icon, GUILayout.Width(64), GUILayout.Height(64));
-                }
-                else
-                {
-                    EditorGUILayout.HelpBox("No icon\nrendered", MessageType.None);
-                }
 
-                EditorGUILayout.BeginVertical();
-                
-                // Render icon button
-                GUI.enabled = currentSlot.isConfigured && avatarDescriptor != null && outfitRoot != null;
-                if (GUILayout.Button("Render Icon", GUILayout.Height(25)))
-                {
-                    RenderSlotIcon(selectedSlotIndex);
-                }
-                
-                // Clear icon button
-                GUI.enabled = icon != null;
-                if (GUILayout.Button("Clear Icon", GUILayout.Height(25)))
-                {
-                    ClearSlotIcon(selectedSlotIndex);
-                }
-                GUI.enabled = true;
-                
-                EditorGUILayout.EndVertical();
-                EditorGUILayout.EndHorizontal();
-            }
-        }
-
-        private void DrawSlotActions()
-        {
-            EditorGUILayout.LabelField("Slot Actions", EditorStyles.boldLabel);
-
-            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-            {
+                // Action buttons
                 EditorGUILayout.BeginHorizontal();
 
-                // Save current visibility
-                GUI.backgroundColor = new Color(0.5f, 0.8f, 0.5f);
-                if (GUILayout.Button("Save Current Visibility to Slot", GUILayout.Height(30)))
+                GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f);
+                if (GUILayout.Button(Tips.SaveSlot, GUILayout.Height(30)))
                 {
                     SaveCurrentVisibilityToSlot();
                 }
 
-                GUI.backgroundColor = Color.white;
-                EditorGUILayout.EndHorizontal();
-
-                EditorGUILayout.Space(5);
-
-                EditorGUILayout.BeginHorizontal();
-
-                // Load in Editor
-                GUI.backgroundColor = new Color(0.5f, 0.7f, 0.9f);
-                GUI.enabled = slotData != null && 
-                             slotData.slots != null && 
-                             slotData.slots[selectedSlotIndex] != null &&
-                             slotData.slots[selectedSlotIndex].isConfigured;
-
-                if (GUILayout.Button("Load Slot in Editor", GUILayout.Height(30)))
+                GUI.backgroundColor = new Color(0.4f, 0.6f, 0.9f);
+                GUI.enabled = currentSlot.isConfigured;
+                if (GUILayout.Button(Tips.LoadSlot, GUILayout.Height(30)))
                 {
                     LoadSlotInEditor();
                 }
+                GUI.enabled = true;
+                GUI.backgroundColor = Color.white;
 
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.Space(5);
+
+                // Icon rendering
+                EditorGUILayout.BeginHorizontal();
+                
+                GUI.enabled = currentSlot.isConfigured;
+                if (GUILayout.Button(Tips.RenderIcon, GUILayout.Height(25)))
+                {
+                    RenderSlotIcon(selectedSlotIndex);
+                }
                 GUI.enabled = true;
 
-                // Clear slot
-                GUI.backgroundColor = new Color(0.9f, 0.5f, 0.5f);
-                if (GUILayout.Button("Clear Slot", GUILayout.Height(30)))
+                GUI.backgroundColor = new Color(0.9f, 0.4f, 0.4f);
+                if (GUILayout.Button("Clear Slot", GUILayout.Height(25)))
                 {
                     ClearSlot();
                 }
-
                 GUI.backgroundColor = Color.white;
+
                 EditorGUILayout.EndHorizontal();
             }
         }
 
-        private void DrawIconRendering()
+        private void DrawQuickActions()
         {
-            EditorGUILayout.LabelField("Icon Rendering", EditorStyles.boldLabel);
-
-            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            showIconSettings = EditorGUILayout.Foldout(showIconSettings, "Icon Camera Settings", true);
+            if (showIconSettings)
             {
-                // Camera preset selector
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("Camera Preset:", GUILayout.Width(100));
-                int newPreset = EditorGUILayout.Popup(selectedCameraPreset, cameraPresetNames);
-                if (newPreset != selectedCameraPreset)
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
                 {
-                    selectedCameraPreset = newPreset;
-                    ApplyCameraPreset(newPreset);
-                }
-                EditorGUILayout.EndHorizontal();
-
-                // Show custom settings foldout
-                showIconSettings = EditorGUILayout.Foldout(showIconSettings, "Custom Camera Settings", true);
-                if (showIconSettings)
-                {
-                    EditorGUI.indentLevel++;
-                    iconCameraSettings.cameraDistance = EditorGUILayout.Slider("Distance", iconCameraSettings.cameraDistance, 0.3f, 5f);
-                    iconCameraSettings.cameraHeightOffset = EditorGUILayout.Slider("Height Offset", iconCameraSettings.cameraHeightOffset, -1f, 1f);
-                    iconCameraSettings.cameraRotationOffset = EditorGUILayout.Slider("Rotation", iconCameraSettings.cameraRotationOffset, -180f, 180f);
-                    iconCameraSettings.fieldOfView = EditorGUILayout.Slider("FOV", iconCameraSettings.fieldOfView, 10f, 90f);
-                    iconCameraSettings.useTransparentBackground = EditorGUILayout.Toggle("Transparent BG", iconCameraSettings.useTransparentBackground);
-                    if (!iconCameraSettings.useTransparentBackground)
+                    selectedCameraPreset = EditorGUILayout.Popup("Preset", selectedCameraPreset, cameraPresetNames);
+                    if (GUI.changed)
                     {
-                        iconCameraSettings.backgroundColor = EditorGUILayout.ColorField("Background", iconCameraSettings.backgroundColor);
+                        ApplyCameraPreset(selectedCameraPreset);
                     }
-                    EditorGUI.indentLevel--;
+
+                    iconCameraSettings.cameraDistance = EditorGUILayout.Slider("Distance", iconCameraSettings.cameraDistance, 0.3f, 5f);
+                    iconCameraSettings.cameraHeightOffset = EditorGUILayout.Slider("Height", iconCameraSettings.cameraHeightOffset, -1f, 1f);
+                    iconCameraSettings.fieldOfView = EditorGUILayout.Slider("FOV", iconCameraSettings.fieldOfView, 10f, 90f);
+
+                    EditorGUILayout.Space(5);
+
+                    GUI.enabled = slotData != null && slotData.GetConfiguredSlotCount() > 0;
+                    if (GUILayout.Button("Render All Icons"))
+                    {
+                        RenderAllIcons();
+                    }
+                    GUI.enabled = true;
                 }
-
-                EditorGUILayout.Space(5);
-
-                // Render all icons button
-                GUI.enabled = slotData != null && slotData.GetConfiguredSlotCount() > 0 && avatarDescriptor != null && outfitRoot != null;
-                GUI.backgroundColor = new Color(0.6f, 0.4f, 0.8f);
-                if (GUILayout.Button("Render All Outfit Icons", GUILayout.Height(30)))
-                {
-                    RenderAllIcons();
-                }
-                GUI.backgroundColor = Color.white;
-                GUI.enabled = true;
-
-                EditorGUILayout.HelpBox(
-                    "Icons are used in the VRChat Expression Menu for each outfit.\n" +
-                    "Position the avatar in the Scene view before rendering.",
-                    MessageType.Info);
             }
         }
 
-        private void DrawAssetGeneration()
-        {
-            EditorGUILayout.LabelField("VRChat Asset Generation", EditorStyles.boldLabel);
+        #endregion
 
+        #region Generate Section
+
+        private void DrawGenerateSection()
+        {
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                // Validation info
-                int configuredCount = slotData?.GetConfiguredSlotCount() ?? 0;
-                EditorGUILayout.LabelField($"Configured Slots: {configuredCount} / {OutfitSlotData.SLOT_COUNT}");
+                EditorGUILayout.LabelField("Generate VRChat Assets", EditorStyles.boldLabel);
+                EditorGUILayout.Space(5);
 
-                if (configuredCount == 0)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Please configure at least one outfit slot before generating assets.",
-                        MessageType.Warning);
-                }
+                int configuredCount = slotData?.GetConfiguredSlotCount() ?? 0;
+                EditorGUILayout.LabelField($"Configured: {configuredCount} / {OutfitSlotData.SLOT_COUNT} slots");
 
                 EditorGUILayout.Space(5);
 
-                // Generate button
-                GUI.enabled = configuredCount > 0 && avatarDescriptor != null && outfitRoot != null;
-                GUI.backgroundColor = new Color(0.4f, 0.6f, 0.9f);
+                outputFolderPath = EditorGUILayout.TextField(Tips.OutputFolder, outputFolderPath);
 
-                if (GUILayout.Button("Generate VRChat Assets", GUILayout.Height(40)))
+                EditorGUILayout.Space(5);
+
+                GUI.enabled = configuredCount > 0;
+                GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
+
+                if (GUILayout.Button(Tips.Generate, GUILayout.Height(40)))
                 {
                     GenerateVRChatAssets();
                 }
@@ -508,45 +824,26 @@ namespace Soph.AvatarOutfitManager.Editor
                 GUI.backgroundColor = Color.white;
                 GUI.enabled = true;
 
-                EditorGUILayout.Space(5);
-
-                // Info box
-                EditorGUILayout.HelpBox(
-                    "This will generate:\n" +
-                    "• Animation Clips for each outfit\n" +
-                    "• FX Animator Layer with outfit states\n" +
-                    "• Expression Parameters (OutfitIndex)\n" +
-                    "• Expressions Menu with outfit selection",
-                    MessageType.Info);
-            }
-        }
-
-        private void OnAvatarChanged()
-        {
-            // Try to find existing slot data for this avatar
-            if (avatarDescriptor != null)
-            {
-                string avatarPath = AssetDatabase.GetAssetPath(avatarDescriptor.gameObject);
-                if (!string.IsNullOrEmpty(avatarPath))
+                if (configuredCount == 0)
                 {
-                    // Could search for existing slot data here
+                    EditorGUILayout.HelpBox("Save at least one outfit to generate VRChat assets.", MessageType.Info);
                 }
             }
         }
 
-        private void ValidateOutfitRoot()
+        private void DrawHeader()
         {
-            if (outfitRoot == null || avatarDescriptor == null) return;
-
-            if (!outfitRoot.IsChildOf(avatarDescriptor.transform))
-            {
-                Debug.LogWarning("[Outfit Manager] Outfit Root must be a child of the Avatar!");
-            }
+            EditorGUILayout.LabelField("Soph's Outfit Manager", headerStyle);
         }
 
-        private void CreateNewSlotData()
+        #endregion
+
+        #region Core Functionality
+
+        private void EnsureSlotData()
         {
-            // Ensure folder exists
+            if (slotData != null) return;
+
             string folderPath = "Assets/AvatarOutfitManager";
             if (!Directory.Exists(folderPath))
             {
@@ -554,44 +851,41 @@ namespace Soph.AvatarOutfitManager.Editor
             }
 
             string avatarName = avatarDescriptor != null ? avatarDescriptor.gameObject.name : "Avatar";
-            string assetPath = AssetDatabase.GenerateUniqueAssetPath(
-                $"{folderPath}/OutfitData_{avatarName}.asset");
+            string assetPath = AssetDatabase.GenerateUniqueAssetPath($"{folderPath}/OutfitData_{avatarName}.asset");
 
             slotData = ScriptableObject.CreateInstance<OutfitSlotData>();
             slotData.InitializeSlots();
 
             AssetDatabase.CreateAsset(slotData, assetPath);
             AssetDatabase.SaveAssets();
+        }
 
-            Debug.Log($"[Outfit Manager] Created new slot data at: {assetPath}");
+        private void ApplyPresetNames()
+        {
+            if (slotData == null) return;
+
+            Undo.RecordObject(slotData, "Apply Preset Names");
+
+            for (int i = 0; i < OutfitSlotData.SLOT_COUNT && i < PresetSlotNames.Length; i++)
+            {
+                slotData.slots[i].slotName = PresetSlotNames[i];
+            }
+
+            EditorUtility.SetDirty(slotData);
+            AssetDatabase.SaveAssets();
         }
 
         private void SaveCurrentVisibilityToSlot()
         {
-            if (outfitRoot == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Outfit Root is not assigned!", "OK");
-                return;
-            }
+            if (outfitRoot == null) return;
 
-            // Create slot data if needed
-            if (slotData == null)
-            {
-                CreateNewSlotData();
-            }
-
-            slotData.InitializeSlots();
+            EnsureSlotData();
 
             var currentSlot = slotData.slots[selectedSlotIndex];
-            
             Undo.RecordObject(slotData, "Save Outfit to Slot");
 
-            // Clear existing states
             currentSlot.objectStates.Clear();
-
-            // Collect all GameObjects under outfit root
             CollectObjectStates(outfitRoot, outfitRoot, currentSlot.objectStates);
-
             currentSlot.isConfigured = true;
 
             EditorUtility.SetDirty(slotData);
@@ -605,14 +899,11 @@ namespace Soph.AvatarOutfitManager.Editor
             foreach (Transform child in current)
             {
                 string relativePath = VRChatAssetGenerator.GetRelativePath(root, child);
-                
                 states.Add(new GameObjectState
                 {
                     path = relativePath,
                     isActive = child.gameObject.activeSelf
                 });
-
-                // Recurse into children
                 CollectObjectStates(root, child, states);
             }
         }
@@ -624,23 +915,15 @@ namespace Soph.AvatarOutfitManager.Editor
             var currentSlot = slotData.slots[selectedSlotIndex];
             if (!currentSlot.isConfigured) return;
 
-            Undo.RecordObject(outfitRoot.gameObject, "Load Outfit Slot");
-
-            // Create path to object mapping
             var pathToObject = new Dictionary<string, Transform>();
             CollectPathMappings(outfitRoot, outfitRoot, pathToObject);
 
-            // Apply states
             foreach (var state in currentSlot.objectStates)
             {
                 if (pathToObject.TryGetValue(state.path, out Transform obj))
                 {
                     Undo.RecordObject(obj.gameObject, "Load Outfit Slot");
                     obj.gameObject.SetActive(state.isActive);
-                }
-                else
-                {
-                    Debug.LogWarning($"[Outfit Manager] Object not found: {state.path}");
                 }
             }
 
@@ -661,99 +944,36 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             if (slotData == null) return;
 
-            if (!EditorUtility.DisplayDialog(
-                "Clear Slot",
-                $"Are you sure you want to clear slot {selectedSlotIndex}?",
-                "Yes", "No"))
-            {
+            if (!EditorUtility.DisplayDialog("Clear Slot", $"Clear slot {selectedSlotIndex}?", "Yes", "No"))
                 return;
-            }
 
             Undo.RecordObject(slotData, "Clear Outfit Slot");
-
             slotData.slots[selectedSlotIndex].Clear();
-
             EditorUtility.SetDirty(slotData);
             AssetDatabase.SaveAssets();
-
-            Debug.Log($"[Outfit Manager] Cleared slot {selectedSlotIndex}");
         }
 
         private void GenerateVRChatAssets()
         {
-            if (!ValidateForGeneration()) return;
+            if (avatarDescriptor == null || outfitRoot == null || slotData == null) return;
+            if (slotData.GetConfiguredSlotCount() == 0) return;
 
-            bool success = VRChatAssetGenerator.GenerateAllAssets(
-                avatarDescriptor,
-                outfitRoot,
-                slotData,
-                outputFolderPath);
-
-            if (success)
-            {
-                // Select the output folder in Project window
-                var folder = AssetDatabase.LoadAssetAtPath<Object>(outputFolderPath);
-                if (folder != null)
-                {
-                    Selection.activeObject = folder;
-                    EditorGUIUtility.PingObject(folder);
-                }
-            }
+            VRChatAssetGenerator.GenerateAllAssets(avatarDescriptor, outfitRoot, slotData, outputFolderPath);
         }
 
-        private bool ValidateForGeneration()
-        {
-            if (avatarDescriptor == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Avatar is not assigned!", "OK");
-                return false;
-            }
-
-            if (outfitRoot == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Outfit Root is not assigned!", "OK");
-                return false;
-            }
-
-            if (!outfitRoot.IsChildOf(avatarDescriptor.transform))
-            {
-                EditorUtility.DisplayDialog("Error", "Outfit Root must be a child of the Avatar!", "OK");
-                return false;
-            }
-
-            if (slotData == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Slot Data is not assigned!", "OK");
-                return false;
-            }
-
-            if (slotData.GetConfiguredSlotCount() == 0)
-            {
-                EditorUtility.DisplayDialog("Error", "No outfit slots are configured!", "OK");
-                return false;
-            }
-
-            return true;
-        }
+        #endregion
 
         #region Icon Rendering
 
-        private void ApplyCameraPreset(int presetIndex)
+        private void ApplyCameraPreset(int preset)
         {
-            switch (presetIndex)
+            iconCameraSettings = preset switch
             {
-                case 1: // Portrait
-                    iconCameraSettings = IconCameraSettings.Portrait();
-                    break;
-                case 2: // Full Body
-                    iconCameraSettings = IconCameraSettings.FullBody();
-                    break;
-                case 3: // 3/4 View
-                    iconCameraSettings = IconCameraSettings.ThreeQuarter();
-                    break;
-                default: // Custom - keep current settings
-                    break;
-            }
+                1 => IconCameraSettings.Portrait(),
+                2 => IconCameraSettings.FullBody(),
+                3 => IconCameraSettings.ThreeQuarter(),
+                _ => iconCameraSettings
+            };
         }
 
         private void RenderSlotIcon(int slotIndex)
@@ -761,25 +981,13 @@ namespace Soph.AvatarOutfitManager.Editor
             if (slotData == null || avatarDescriptor == null || outfitRoot == null) return;
 
             var slot = slotData.slots[slotIndex];
-            if (!slot.isConfigured)
-            {
-                EditorUtility.DisplayDialog("Error", "This slot is not configured!", "OK");
-                return;
-            }
+            if (!slot.isConfigured) return;
 
-            // Ensure output folder exists
-            string iconsFolder = Path.Combine(outputFolderPath, "Icons");
-            if (!Directory.Exists(iconsFolder))
-            {
-                Directory.CreateDirectory(iconsFolder);
-            }
-
-            // Store current visibility state to restore later
             var originalStates = StoreCurrentVisibility();
 
             try
             {
-                var icon = OutfitIconRenderer.RenderSlotIcon(
+                OutfitIconRenderer.RenderSlotIcon(
                     avatarDescriptor.transform,
                     outfitRoot,
                     slot,
@@ -787,39 +995,12 @@ namespace Soph.AvatarOutfitManager.Editor
                     outputFolderPath,
                     iconCameraSettings);
 
-                if (icon != null)
-                {
-                    EditorUtility.SetDirty(slotData);
-                    AssetDatabase.SaveAssets();
-                    Debug.Log($"[Outfit Manager] Rendered icon for slot {slotIndex}");
-                }
+                EditorUtility.SetDirty(slotData);
+                AssetDatabase.SaveAssets();
             }
             finally
             {
-                // Restore original visibility
                 RestoreVisibility(originalStates);
-            }
-
-            Repaint();
-        }
-
-        private void ClearSlotIcon(int slotIndex)
-        {
-            if (slotData == null) return;
-
-            var slot = slotData.slots[slotIndex];
-            if (!string.IsNullOrEmpty(slot.iconPath))
-            {
-                // Delete the icon file
-                if (File.Exists(slot.iconPath))
-                {
-                    AssetDatabase.DeleteAsset(slot.iconPath);
-                }
-                
-                slot.iconPath = null;
-                EditorUtility.SetDirty(slotData);
-                AssetDatabase.SaveAssets();
-                Debug.Log($"[Outfit Manager] Cleared icon for slot {slotIndex}");
             }
 
             Repaint();
@@ -829,7 +1010,6 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             if (slotData == null || avatarDescriptor == null || outfitRoot == null) return;
 
-            // Store current visibility state to restore later
             var originalStates = StoreCurrentVisibility();
 
             try
@@ -845,7 +1025,6 @@ namespace Soph.AvatarOutfitManager.Editor
             }
             finally
             {
-                // Restore original visibility
                 RestoreVisibility(originalStates);
             }
 
@@ -856,7 +1035,6 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             var states = new Dictionary<Transform, bool>();
             if (outfitRoot == null) return states;
-
             StoreVisibilityRecursive(outfitRoot, states);
             return states;
         }
@@ -875,64 +1053,41 @@ namespace Soph.AvatarOutfitManager.Editor
             foreach (var kvp in states)
             {
                 if (kvp.Key != null)
-                {
                     kvp.Key.gameObject.SetActive(kvp.Value);
-                }
             }
         }
 
         #endregion
 
-        #region Outfit Root Auto-Detection
-
-        // Common names for outfit/clothing folders
-        private static readonly string[] OutfitFolderNames = new string[]
-        {
-            "Clothing", "Clothes", "Outfits", "Outfit", "Accessories",
-            "Toggles", "Toggle", "Wearables", "Apparel", "Garments",
-            "clothing", "clothes", "outfits", "outfit", "accessories"
-        };
-
-        // Names to exclude (these are usually not outfit containers)
-        private static readonly string[] ExcludedNames = new string[]
-        {
-            "Armature", "Body", "Head", "Hair", "Eyes", "Teeth", "Tongue",
-            "armature", "body", "head", "hair", "eyes", "teeth", "tongue"
-        };
+        #region Auto-Detection
 
         private void AutoDetectOutfitRoot()
         {
-            if (avatarDescriptor == null)
-            {
-                EditorUtility.DisplayDialog("Error", "Please assign an Avatar first!", "OK");
-                return;
-            }
+            if (avatarDescriptor == null) return;
 
-            Transform detected = null;
-
-            // Step 1: Look for common folder names
+            // Look for common folder names
             foreach (string folderName in OutfitFolderNames)
             {
-                detected = FindChildByName(avatarDescriptor.transform, folderName);
-                if (detected != null)
+                foreach (Transform child in avatarDescriptor.transform)
                 {
-                    outfitRoot = detected;
-                    Debug.Log($"[Outfit Manager] Auto-detected outfit root: '{detected.name}'");
-                    return;
+                    if (child.name.Equals(folderName, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        outfitRoot = child;
+                        return;
+                    }
                 }
             }
 
-            // Step 2: Find folder with most toggleable children (meshes)
+            // Find folder with most toggleables
             Transform bestCandidate = null;
             int maxToggleables = 0;
 
             foreach (Transform child in avatarDescriptor.transform)
             {
-                // Skip excluded names
                 bool isExcluded = false;
                 foreach (string excluded in ExcludedNames)
                 {
-                    if (child.name.Contains(excluded))
+                    if (child.name.IndexOf(excluded, System.StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         isExcluded = true;
                         break;
@@ -951,40 +1106,24 @@ namespace Soph.AvatarOutfitManager.Editor
             if (bestCandidate != null && maxToggleables >= 2)
             {
                 outfitRoot = bestCandidate;
-                Debug.Log($"[Outfit Manager] Auto-detected outfit root by content: '{bestCandidate.name}' ({maxToggleables} toggleables)");
-                return;
-            }
-
-            // Step 3: No suitable folder found
-            if (EditorUtility.DisplayDialog(
-                "No Outfit Folder Found",
-                "Could not find an outfit folder. Would you like to create one?",
-                "Create 'Outfits' Folder", "Cancel"))
-            {
-                CreateOutfitRootFolder();
             }
         }
 
         private void CreateOutfitRootFolder()
         {
-            if (avatarDescriptor == null)
+            if (avatarDescriptor == null) return;
+
+            // Check existing
+            foreach (Transform child in avatarDescriptor.transform)
             {
-                EditorUtility.DisplayDialog("Error", "Please assign an Avatar first!", "OK");
-                return;
+                if (child.name.Equals("Outfits", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    outfitRoot = child;
+                    return;
+                }
             }
 
-            // Check if folder already exists
-            Transform existing = FindChildByName(avatarDescriptor.transform, "Outfits");
-            if (existing != null)
-            {
-                outfitRoot = existing;
-                Debug.Log("[Outfit Manager] Using existing 'Outfits' folder");
-                return;
-            }
-
-            // Create new folder
-            Undo.RecordObject(avatarDescriptor.gameObject, "Create Outfit Folder");
-            
+            // Create new
             GameObject outfitFolder = new GameObject("Outfits");
             outfitFolder.transform.SetParent(avatarDescriptor.transform);
             outfitFolder.transform.localPosition = Vector3.zero;
@@ -992,28 +1131,12 @@ namespace Soph.AvatarOutfitManager.Editor
             outfitFolder.transform.localScale = Vector3.one;
 
             Undo.RegisterCreatedObjectUndo(outfitFolder, "Create Outfit Folder");
-
             outfitRoot = outfitFolder.transform;
-            
-            Debug.Log("[Outfit Manager] Created new 'Outfits' folder");
-            
+
             EditorUtility.DisplayDialog(
                 "Folder Created",
-                "Created 'Outfits' folder under your avatar.\n\n" +
-                "Now drag your clothing/accessory GameObjects into this folder!",
+                "Created 'Outfits' folder. Drag your clothing items into it!",
                 "OK");
-        }
-
-        private Transform FindChildByName(Transform parent, string name)
-        {
-            foreach (Transform child in parent)
-            {
-                if (child.name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    return child;
-                }
-            }
-            return null;
         }
 
         private int CountToggleableObjects(Transform root)
@@ -1027,10 +1150,7 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             foreach (Transform child in parent)
             {
-                // Count objects that have renderers (meshes) or are likely toggleable
-                if (child.GetComponent<Renderer>() != null || 
-                    child.GetComponent<SkinnedMeshRenderer>() != null ||
-                    child.childCount > 0)
+                if (child.GetComponent<Renderer>() != null || child.childCount > 0)
                 {
                     count++;
                 }
