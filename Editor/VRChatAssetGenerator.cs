@@ -246,11 +246,22 @@ namespace Soph.AvatarOutfitManager.Editor
                 // IMPORTANT: With Write Defaults OFF, ALL objects must be explicitly set in EVERY clip
                 int activeCount = 0;
                 int inactiveCount = 0;
+                int errorCount = 0;
                 
                 foreach (var obj in allObjects)
                 {
+                    if (obj == null || obj.transform == null) continue;
+                    
                     string avatarRelativePath = GetRelativePath(avatarRoot, obj.transform);
                     string outfitRelativePath = GetRelativePath(outfitRoot, obj.transform);
+
+                    // Validate path
+                    if (string.IsNullOrEmpty(avatarRelativePath))
+                    {
+                        Debug.LogWarning($"[Outfit Manager] Empty path for object '{obj.name}' in clip '{clip.name}'");
+                        errorCount++;
+                        continue;
+                    }
 
                     bool shouldBeActive = slot.isConfigured && activePaths.Contains(outfitRelativePath);
 
@@ -259,14 +270,27 @@ namespace Soph.AvatarOutfitManager.Editor
                     float value = shouldBeActive ? 1f : 0f;
                     curve.AddKey(0f, value);
                     
-                    // Set the curve - this explicitly sets the GameObject's active state
-                    clip.SetCurve(avatarRelativePath, typeof(GameObject), "m_IsActive", curve);
-                    
-                    if (shouldBeActive) activeCount++;
-                    else inactiveCount++;
+                    try
+                    {
+                        // Set the curve - this explicitly sets the GameObject's active state
+                        clip.SetCurve(avatarRelativePath, typeof(GameObject), "m_IsActive", curve);
+                        
+                        if (shouldBeActive) activeCount++;
+                        else inactiveCount++;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogError($"[Outfit Manager] Failed to set curve for '{obj.name}' (path: '{avatarRelativePath}'): {ex.Message}");
+                        errorCount++;
+                    }
                 }
                 
-                Debug.Log($"[Outfit Manager] Generated clip '{clip.name}': {activeCount} active, {inactiveCount} inactive objects");
+                if (errorCount > 0)
+                {
+                    Debug.LogWarning($"[Outfit Manager] Clip '{clip.name}' had {errorCount} errors setting curves");
+                }
+                
+                Debug.Log($"[Outfit Manager] Generated clip '{clip.name}': {activeCount} active, {inactiveCount} inactive objects (errors: {errorCount})");
 
                 // Save clip
                 string clipPath = Path.Combine(clipsFolder, $"{clip.name}.anim");
@@ -308,11 +332,6 @@ namespace Soph.AvatarOutfitManager.Editor
             float radius = 200f;
             Vector3 center = new Vector3(300, 100, 0);
 
-            // Create Entry state that points to default outfit
-            // This ensures the layer starts in a valid state
-            var entryState = layer.stateMachine.AddState("Entry", new Vector3(0, 0, 0));
-            entryState.writeDefaultValues = false;
-
             // Create states for each outfit
             var states = new List<AnimatorState>();
             for (int i = 0; i < animationClips.Count; i++)
@@ -349,32 +368,47 @@ namespace Soph.AvatarOutfitManager.Editor
             if (defaultState != null)
             {
                 layer.stateMachine.defaultState = defaultState;
-                
-                // Create transition from Entry to default state
-                var entryTransition = entryState.AddTransition(defaultState);
-                entryTransition.duration = 0f;
-                entryTransition.hasExitTime = false;
-                entryTransition.exitTime = 0f;
+                Debug.Log($"[Outfit Manager] Set default state to: {defaultState.name}");
             }
 
-            // Create Any State transitions to each outfit state
+            // Create transitions: Any State -> Each Outfit State
+            // Also create transitions between states for smooth switching
             for (int i = 0; i < states.Count; i++)
             {
                 // Skip if this state has no motion (unconfigured slot)
                 if (states[i].motion == null) continue;
 
-                var transition = layer.stateMachine.AddAnyStateTransition(states[i]);
-                transition.duration = 0f;
-                transition.exitTime = 0f;
-                transition.hasExitTime = false;
-                transition.hasFixedDuration = true;
+                // Transition from Any State to this outfit state
+                var anyStateTransition = layer.stateMachine.AddAnyStateTransition(states[i]);
+                anyStateTransition.duration = 0f;
+                anyStateTransition.exitTime = 0f;
+                anyStateTransition.hasExitTime = false;
+                anyStateTransition.hasFixedDuration = true;
                 
                 // Add condition: OutfitIndex == i
-                transition.AddCondition(AnimatorConditionMode.Equals, i, PARAMETER_NAME);
+                anyStateTransition.AddCondition(AnimatorConditionMode.Equals, i, PARAMETER_NAME);
                 
                 // Prevent self-transition
-                transition.canTransitionToSelf = false;
+                anyStateTransition.canTransitionToSelf = false;
+
+                // Also create transitions from each other state to this one
+                // This ensures smooth switching between outfits
+                for (int j = 0; j < states.Count; j++)
+                {
+                    if (i == j || states[j].motion == null) continue;
+
+                    var stateTransition = states[j].AddTransition(states[i]);
+                    stateTransition.duration = 0f;
+                    stateTransition.exitTime = 0f;
+                    stateTransition.hasExitTime = false;
+                    stateTransition.hasFixedDuration = true;
+                    
+                    // Condition: OutfitIndex == i
+                    stateTransition.AddCondition(AnimatorConditionMode.Equals, i, PARAMETER_NAME);
+                }
             }
+            
+            Debug.Log($"[Outfit Manager] Created {states.Count} states with transitions in FX Layer");
 
             // Add the layer to the controller
             fxController.AddLayer(layer);
@@ -515,20 +549,8 @@ namespace Soph.AvatarOutfitManager.Editor
             var outfitMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             outfitMenu.controls = new List<VRCExpressionsMenu.Control>();
 
-            // Add Radial Puppet control for outfit selection
-            var radialControl = new VRCExpressionsMenu.Control
-            {
-                name = "Select Outfit",
-                type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                icon = menuIcon,
-                subParameters = new VRCExpressionsMenu.Control.Parameter[]
-                {
-                    new VRCExpressionsMenu.Control.Parameter { name = PARAMETER_NAME }
-                }
-            };
-            outfitMenu.controls.Add(radialControl);
-
-            // Also add individual buttons for each configured outfit
+            // Add individual toggle buttons for each configured outfit
+            // (No Radial Puppet - toggle buttons are more intuitive)
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
                 if (slotData.slots[i].isConfigured)

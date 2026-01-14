@@ -108,6 +108,15 @@ namespace Soph.AvatarOutfitManager.Editor
                 showWizard = true;
                 currentWizardStep = WizardStep.Avatar;
             }
+            
+            // Try to load saved data if avatar is already assigned
+            LoadSavedData();
+        }
+        
+        private void OnDisable()
+        {
+            // Save current state when window closes
+            SaveCurrentState();
         }
 
         private void InitializeStyles()
@@ -509,8 +518,8 @@ namespace Soph.AvatarOutfitManager.Editor
                 CreateOutfitRootFolder();
             }
 
-            // Ensure slot data exists
-            EnsureSlotData();
+            // Try to load existing slot data, otherwise create new
+            LoadSlotDataForAvatar();
 
             showWizard = false;
             MarkNotFirstTime();
@@ -532,7 +541,13 @@ namespace Soph.AvatarOutfitManager.Editor
                 EditorGUILayout.Space(10);
 
                 // Manual fields
-                avatarDescriptor = EditorGUILayout.ObjectField(Tips.Avatar, avatarDescriptor, typeof(VRCAvatarDescriptor), true) as VRCAvatarDescriptor;
+                var newAvatar = EditorGUILayout.ObjectField(Tips.Avatar, avatarDescriptor, typeof(VRCAvatarDescriptor), true) as VRCAvatarDescriptor;
+                
+                if (newAvatar != avatarDescriptor)
+                {
+                    avatarDescriptor = newAvatar;
+                    OnAvatarChanged();
+                }
 
                 if (avatarDescriptor != null)
                 {
@@ -572,6 +587,23 @@ namespace Soph.AvatarOutfitManager.Editor
                     outfitRoot = null;
                 }
             }
+        }
+
+        private void OnAvatarChanged()
+        {
+            // Auto-detect outfit root
+            AutoDetectOutfitRoot();
+            
+            // Load existing slot data for this avatar
+            LoadSlotDataForAvatar();
+            
+            // If no slot data found, ensure one exists
+            if (slotData == null)
+            {
+                EnsureSlotData();
+            }
+            
+            Repaint();
         }
 
         #endregion
@@ -842,23 +874,197 @@ namespace Soph.AvatarOutfitManager.Editor
 
         private void EnsureSlotData()
         {
-            if (slotData != null) return;
-
-            string folderPath = "Assets/AvatarOutfitManager";
-            if (!Directory.Exists(folderPath))
+            if (slotData != null)
             {
-                Directory.CreateDirectory(folderPath);
+                // Update avatar reference if needed
+                if (avatarDescriptor != null)
+                {
+                    string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+                    if (string.IsNullOrEmpty(slotData.avatarGuid) || slotData.avatarGuid != avatarGuid)
+                    {
+                        slotData.avatarGuid = avatarGuid;
+                        if (outfitRoot != null)
+                        {
+                            slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+                        }
+                        EditorUtility.SetDirty(slotData);
+                    }
+                }
+                return;
             }
 
-            string avatarName = avatarDescriptor != null ? avatarDescriptor.gameObject.name : "Avatar";
-            string assetPath = AssetDatabase.GenerateUniqueAssetPath($"{folderPath}/OutfitData_{avatarName}.asset");
+            // Try to load existing slot data first
+            LoadSlotDataForAvatar();
+            
+            // If still no slot data, create new
+            if (slotData == null)
+            {
+                string folderPath = "Assets/AvatarOutfitManager";
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
 
-            slotData = ScriptableObject.CreateInstance<OutfitSlotData>();
-            slotData.InitializeSlots();
+                string avatarName = avatarDescriptor != null ? avatarDescriptor.gameObject.name : "Avatar";
+                string assetPath = AssetDatabase.GenerateUniqueAssetPath($"{folderPath}/OutfitData_{avatarName}.asset");
 
-            AssetDatabase.CreateAsset(slotData, assetPath);
-            AssetDatabase.SaveAssets();
+                slotData = ScriptableObject.CreateInstance<OutfitSlotData>();
+                slotData.InitializeSlots();
+                
+                // Store avatar reference
+                if (avatarDescriptor != null)
+                {
+                    slotData.avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+                    if (outfitRoot != null)
+                    {
+                        slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+                    }
+                }
+
+                AssetDatabase.CreateAsset(slotData, assetPath);
+                AssetDatabase.SaveAssets();
+            }
         }
+        
+        private void LoadSlotDataForAvatar()
+        {
+            if (avatarDescriptor == null) return;
+            
+            string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+            if (string.IsNullOrEmpty(avatarGuid)) return;
+            
+            // Search for existing slot data
+            string[] guids = AssetDatabase.FindAssets("t:OutfitSlotData");
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var data = AssetDatabase.LoadAssetAtPath<OutfitSlotData>(path);
+                
+                if (data != null && data.avatarGuid == avatarGuid)
+                {
+                    slotData = data;
+                    
+                    // Try to restore outfit root if path is stored
+                    if (!string.IsNullOrEmpty(data.outfitRootPath) && avatarDescriptor != null)
+                    {
+                        Transform foundRoot = FindTransformByPath(avatarDescriptor.transform, data.outfitRootPath);
+                        if (foundRoot != null)
+                        {
+                            outfitRoot = foundRoot;
+                        }
+                    }
+                    
+                    Debug.Log($"[Outfit Manager] Loaded existing slot data: {path}");
+                    return;
+                }
+            }
+            
+            // Also try to find by avatar name (fallback for old data)
+            string avatarName = avatarDescriptor.gameObject.name;
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.Contains($"OutfitData_{avatarName}"))
+                {
+                    var data = AssetDatabase.LoadAssetAtPath<OutfitSlotData>(path);
+                    if (data != null)
+                    {
+                        slotData = data;
+                        // Update GUID for future lookups
+                        slotData.avatarGuid = avatarGuid;
+                        if (outfitRoot != null)
+                        {
+                            slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+                        }
+                        EditorUtility.SetDirty(slotData);
+                        AssetDatabase.SaveAssets();
+                        Debug.Log($"[Outfit Manager] Loaded slot data by name and updated GUID: {path}");
+                        return;
+                    }
+                }
+            }
+        }
+        
+        private Transform FindTransformByPath(Transform root, string relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath)) return root;
+        
+        string[] parts = relativePath.Split('/');
+        Transform current = root;
+        
+        foreach (string part in parts)
+        {
+            if (current == null) return null;
+            
+            Transform found = null;
+            foreach (Transform child in current)
+            {
+                if (child.name == part)
+                {
+                    found = child;
+                    break;
+                }
+            }
+            
+            if (found == null) return null;
+            current = found;
+        }
+        
+        return current;
+    }
+    
+    private void LoadSavedData()
+    {
+        // Try to restore last used avatar from EditorPrefs
+        string lastAvatarGuid = EditorPrefs.GetString("SophOutfitManager_LastAvatarGuid", "");
+        if (!string.IsNullOrEmpty(lastAvatarGuid))
+        {
+            string avatarPath = AssetDatabase.GUIDToAssetPath(lastAvatarGuid);
+            if (!string.IsNullOrEmpty(avatarPath))
+            {
+                var avatarGO = AssetDatabase.LoadAssetAtPath<GameObject>(avatarPath);
+                if (avatarGO != null)
+                {
+                    var descriptor = avatarGO.GetComponent<VRCAvatarDescriptor>();
+                    if (descriptor != null)
+                    {
+                        avatarDescriptor = descriptor;
+                        AutoDetectOutfitRoot();
+                        LoadSlotDataForAvatar();
+                    }
+                }
+            }
+        }
+    }
+    
+    private void SaveCurrentState()
+    {
+        // Save avatar reference for next time
+        if (avatarDescriptor != null)
+        {
+            string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+            if (!string.IsNullOrEmpty(avatarGuid))
+            {
+                EditorPrefs.SetString("SophOutfitManager_LastAvatarGuid", avatarGuid);
+            }
+        }
+        
+        // Save slot data references
+        if (slotData != null && avatarDescriptor != null)
+        {
+            string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+            if (!string.IsNullOrEmpty(avatarGuid))
+            {
+                slotData.avatarGuid = avatarGuid;
+                if (outfitRoot != null)
+                {
+                    slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+                }
+                EditorUtility.SetDirty(slotData);
+                AssetDatabase.SaveAssets();
+            }
+        }
+    }
 
         private void ApplyPresetNames()
         {
@@ -887,6 +1093,13 @@ namespace Soph.AvatarOutfitManager.Editor
             currentSlot.objectStates.Clear();
             CollectObjectStates(outfitRoot, outfitRoot, currentSlot.objectStates);
             currentSlot.isConfigured = true;
+            
+            // Update avatar reference
+            if (avatarDescriptor != null)
+            {
+                slotData.avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
+                slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+            }
 
             EditorUtility.SetDirty(slotData);
             AssetDatabase.SaveAssets();
