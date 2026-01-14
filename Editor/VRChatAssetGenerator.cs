@@ -218,6 +218,8 @@ namespace Soph.AvatarOutfitManager.Editor
 
             // Collect all outfit objects once
             var allObjects = CollectAllGameObjects(outfitRoot);
+            
+            Debug.Log($"[Outfit Manager] Found {allObjects.Count} toggleable objects under '{outfitRoot.name}'");
 
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
@@ -241,6 +243,10 @@ namespace Soph.AvatarOutfitManager.Editor
                 }
 
                 // Set curves for all tracked objects
+                // IMPORTANT: With Write Defaults OFF, ALL objects must be explicitly set in EVERY clip
+                int activeCount = 0;
+                int inactiveCount = 0;
+                
                 foreach (var obj in allObjects)
                 {
                     string avatarRelativePath = GetRelativePath(avatarRoot, obj.transform);
@@ -248,10 +254,19 @@ namespace Soph.AvatarOutfitManager.Editor
 
                     bool shouldBeActive = slot.isConfigured && activePaths.Contains(outfitRelativePath);
 
+                    // Create curve with explicit value (1 = active, 0 = inactive)
                     var curve = new AnimationCurve();
-                    curve.AddKey(0f, shouldBeActive ? 1f : 0f);
+                    float value = shouldBeActive ? 1f : 0f;
+                    curve.AddKey(0f, value);
+                    
+                    // Set the curve - this explicitly sets the GameObject's active state
                     clip.SetCurve(avatarRelativePath, typeof(GameObject), "m_IsActive", curve);
+                    
+                    if (shouldBeActive) activeCount++;
+                    else inactiveCount++;
                 }
+                
+                Debug.Log($"[Outfit Manager] Generated clip '{clip.name}': {activeCount} active, {inactiveCount} inactive objects");
 
                 // Save clip
                 string clipPath = Path.Combine(clipsFolder, $"{clip.name}.anim");
@@ -293,6 +308,11 @@ namespace Soph.AvatarOutfitManager.Editor
             float radius = 200f;
             Vector3 center = new Vector3(300, 100, 0);
 
+            // Create Entry state that points to default outfit
+            // This ensures the layer starts in a valid state
+            var entryState = layer.stateMachine.AddState("Entry", new Vector3(0, 0, 0));
+            entryState.writeDefaultValues = false;
+
             // Create states for each outfit
             var states = new List<AnimatorState>();
             for (int i = 0; i < animationClips.Count; i++)
@@ -309,15 +329,40 @@ namespace Soph.AvatarOutfitManager.Editor
                 states.Add(state);
             }
 
-            // Set first state as default
-            if (states.Count > 0)
+            // Set first configured state as default (or first state if none configured)
+            AnimatorState defaultState = null;
+            for (int i = 0; i < states.Count; i++)
             {
-                layer.stateMachine.defaultState = states[0];
+                // Check if this state has a motion (clip exists)
+                if (states[i].motion != null)
+                {
+                    defaultState = states[i];
+                    break;
+                }
+            }
+            
+            if (defaultState == null && states.Count > 0)
+            {
+                defaultState = states[0];
+            }
+
+            if (defaultState != null)
+            {
+                layer.stateMachine.defaultState = defaultState;
+                
+                // Create transition from Entry to default state
+                var entryTransition = entryState.AddTransition(defaultState);
+                entryTransition.duration = 0f;
+                entryTransition.hasExitTime = false;
+                entryTransition.exitTime = 0f;
             }
 
             // Create Any State transitions to each outfit state
             for (int i = 0; i < states.Count; i++)
             {
+                // Skip if this state has no motion (unconfigured slot)
+                if (states[i].motion == null) continue;
+
                 var transition = layer.stateMachine.AddAnyStateTransition(states[i]);
                 transition.duration = 0f;
                 transition.exitTime = 0f;
