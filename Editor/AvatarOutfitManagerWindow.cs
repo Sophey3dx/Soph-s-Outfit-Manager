@@ -510,14 +510,8 @@ namespace Soph.AvatarOutfitManager.Editor
             avatarDescriptor = avatarGO.GetComponent<VRCAvatarDescriptor>();
             if (avatarDescriptor == null) return;
 
-            // Auto-detect outfit root
-            AutoDetectOutfitRoot();
-
-            // If no outfit root found, create one
-            if (outfitRoot == null)
-            {
-                CreateSophOutfitManagerGameObject();
-            }
+            // Always ensure "Soph Outfit Manager" GameObject exists (like GoGo Loco or SPS)
+            CreateSophOutfitManagerGameObject();
 
             // Try to load existing slot data, otherwise create new
             LoadSlotDataForAvatar();

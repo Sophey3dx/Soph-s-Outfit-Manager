@@ -160,6 +160,11 @@ Or manually:
 
 ## Changelog
 
+### v1.2.1
+- Fixed: One-Click Setup now always creates "Soph Outfit Manager" GameObject
+- No longer uses existing folders like SPS or other outfit folders
+- Ensures clean separation between different systems
+
 ### v1.2.0
 - Added dedicated "Soph Outfit Manager" GameObject in hierarchy
 - Improved hierarchy organization (similar to GoGo Loco or SPS)
