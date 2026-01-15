@@ -160,6 +160,13 @@ Or manually:
 
 ## Changelog
 
+### v1.2.4
+- **Objects stay where they are!** No need to move clothing objects - they're automatically detected from avatar hierarchy
+- **Outfit Root is now optional** - Use it for organization, or leave objects where they are
+- **Intelligent outfit detection** - Automatically recognizes clothing/accessory objects (A-, B-, H-, S- prefixes, etc.)
+- **Fixed Button controls** - Menu buttons now correctly use `subParameters` for Int parameters
+- Improved UI messaging about optional Outfit Root folder
+
 ### v1.2.3
 - Fixed "Mixed Write Defaults" error: Automatically detects avatar's Write Defaults preference
 - OutfitManager states now match avatar's Write Defaults setting (ON/OFF)

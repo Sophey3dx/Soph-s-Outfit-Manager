@@ -358,35 +358,52 @@ namespace Soph.AvatarOutfitManager.Editor
             EditorGUILayout.LabelField("Soph Outfit Manager GameObject", wizardHeaderStyle);
             EditorGUILayout.Space(10);
 
+            EditorGUILayout.HelpBox(
+                "Objects stay where they are! The Outfit Manager will collect all clothing/accessory objects directly from your avatar hierarchy.\n\n" +
+                "You can optionally organize them under a folder, but it's not required.",
+                MessageType.Info);
+
+            EditorGUILayout.Space(10);
+
             if (outfitRoot != null)
             {
                 EditorGUILayout.HelpBox(
-                    $"Found: '{outfitRoot.name}' with {CountToggleableObjects(outfitRoot)} items",
+                    $"Optional Outfit Root: '{outfitRoot.name}' (for organization only)",
                     MessageType.Info);
 
                 EditorGUILayout.Space(5);
 
-                if (GUILayout.Button("Use This Folder", GUILayout.Height(35)))
+                if (GUILayout.Button("Continue (Use This Folder)", GUILayout.Height(35)))
                 {
                     currentWizardStep = WizardStep.Ready;
                 }
 
                 EditorGUILayout.Space(5);
 
-                if (GUILayout.Button("Choose Different"))
+                if (GUILayout.Button("Don't Use Folder (Objects stay where they are)"))
+                {
+                    outfitRoot = null;
+                    currentWizardStep = WizardStep.Ready;
+                }
+
+                EditorGUILayout.Space(5);
+
+                if (GUILayout.Button("Choose Different Folder"))
                 {
                     outfitRoot = null;
                 }
             }
             else
             {
-                EditorGUILayout.HelpBox(
-                    "No outfit folder found. Create the 'Soph Outfit Manager' GameObject or select manually.",
-                    MessageType.Warning);
+                if (GUILayout.Button("Continue (Objects stay where they are)", GUILayout.Height(35)))
+                {
+                    currentWizardStep = WizardStep.Ready;
+                }
 
                 EditorGUILayout.Space(10);
 
-                if (GUILayout.Button("Create 'Soph Outfit Manager' GameObject", GUILayout.Height(35)))
+                EditorGUILayout.LabelField("Optional: Create organization folder", EditorStyles.miniLabel);
+                if (GUILayout.Button("Create 'Soph Outfit Manager' GameObject", GUILayout.Height(30)))
                 {
                     CreateSophOutfitManagerGameObject();
                     if (outfitRoot != null)
@@ -582,7 +599,14 @@ namespace Soph.AvatarOutfitManager.Editor
             using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
             {
                 EditorGUILayout.LabelField($"Avatar: {avatarDescriptor.gameObject.name}", GUILayout.Width(150));
-                EditorGUILayout.LabelField($"Outfits: {outfitRoot.name} ({CountToggleableObjects(outfitRoot)} items)");
+                if (outfitRoot != null)
+                {
+                    EditorGUILayout.LabelField($"Outfit Root (optional): {outfitRoot.name}");
+                }
+                else
+                {
+                    EditorGUILayout.LabelField("Outfit Root: Avatar Root (objects stay where they are)");
+                }
                 
                 if (GUILayout.Button("Change", GUILayout.Width(60)))
                 {
@@ -1116,7 +1140,11 @@ namespace Soph.AvatarOutfitManager.Editor
 
         private void SaveCurrentVisibilityToSlot()
         {
-            if (outfitRoot == null) return;
+            if (avatarDescriptor == null)
+            {
+                EditorUtility.DisplayDialog("Error", "No avatar selected. Please select an avatar first.", "OK");
+                return;
+            }
 
             EnsureSlotData();
 
@@ -1124,14 +1152,43 @@ namespace Soph.AvatarOutfitManager.Editor
             Undo.RecordObject(slotData, "Save Outfit to Slot");
 
             currentSlot.objectStates.Clear();
-            CollectObjectStates(outfitRoot, outfitRoot, currentSlot.objectStates);
+            
+            // Collect all outfit objects directly from avatar root (objects stay where they are)
+            // This captures all clothing/accessory objects regardless of where they are in the hierarchy
+            Transform avatarRoot = avatarDescriptor.transform;
+            Debug.Log($"[Outfit Manager] Collecting outfit objects from avatar root '{avatarRoot.name}'...");
+            
+            CollectObjectStates(avatarRoot, avatarRoot, currentSlot.objectStates);
             currentSlot.isConfigured = true;
+            
+            // Warn if no objects collected
+            if (currentSlot.objectStates.Count == 0)
+            {
+                Debug.LogWarning($"[Outfit Manager] WARNING: No outfit objects collected from avatar '{avatarRoot.name}'. " +
+                    "Make sure your clothing/accessory GameObjects are children of the avatar.");
+                EditorUtility.DisplayDialog("Warning", 
+                    $"No outfit objects were collected from '{avatarRoot.name}'.\n\n" +
+                    "This is normal if all outfit objects are currently hidden. Make sure at least some clothing/accessory objects are visible or exist under the avatar.", 
+                    "OK");
+            }
+            else
+            {
+                Debug.Log($"[Outfit Manager] Collected {currentSlot.objectStates.Count} outfit objects from avatar hierarchy.");
+            }
             
             // Update avatar reference
             if (avatarDescriptor != null)
             {
                 slotData.avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
-                slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
+                // Outfit root path is now optional - store empty if not set
+                if (outfitRoot != null && outfitRoot != avatarRoot)
+                {
+                    slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarRoot, outfitRoot);
+                }
+                else
+                {
+                    slotData.outfitRootPath = string.Empty;
+                }
             }
 
             EditorUtility.SetDirty(slotData);
@@ -1140,7 +1197,7 @@ namespace Soph.AvatarOutfitManager.Editor
             // Update component if it exists
             UpdateComponentSlotData();
 
-            Debug.Log($"[Outfit Manager] Saved {currentSlot.objectStates.Count} objects to slot {selectedSlotIndex}");
+            Debug.Log($"[Outfit Manager] Saved {currentSlot.objectStates.Count} objects to slot {selectedSlotIndex} (Slot name: '{currentSlot.slotName}')");
         }
 
         private void CollectObjectStates(Transform root, Transform current, List<GameObjectState> states)
@@ -1149,16 +1206,117 @@ namespace Soph.AvatarOutfitManager.Editor
             {
                 if (ShouldSkipCapture(child))
                 {
+                    // Skip this object but continue recursing (might have valid children)
+                    CollectObjectStates(root, child, states);
                     continue;
                 }
-                string relativePath = VRChatAssetGenerator.GetRelativePath(root, child);
-                states.Add(new GameObjectState
+                
+                // Only capture objects that look like clothing/accessories (have toggleable children or are in clothing folders)
+                // Skip body parts, armature, etc.
+                bool isLikelyOutfitObject = IsLikelyOutfitObject(child);
+                
+                if (isLikelyOutfitObject)
                 {
-                    path = relativePath,
-                    isActive = child.gameObject.activeSelf
-                });
+                    string relativePath = VRChatAssetGenerator.GetRelativePath(root, child);
+                    states.Add(new GameObjectState
+                    {
+                        path = relativePath,
+                        isActive = child.gameObject.activeSelf
+                    });
+                    Debug.Log($"[Outfit Manager] Captured outfit object: '{relativePath}' (Active: {child.gameObject.activeSelf})");
+                }
+                
+                // Always recurse to find nested outfit objects
                 CollectObjectStates(root, child, states);
             }
+        }
+
+        private bool IsLikelyOutfitObject(Transform obj)
+        {
+            if (obj == null) return false;
+            
+            string nameLower = obj.name.ToLowerInvariant();
+            
+            // Skip body parts, armature, bones, etc.
+            if (nameLower.Contains("armature") || 
+                nameLower.Contains("body") || 
+                nameLower.Contains("head") || 
+                nameLower == "hair" || 
+                nameLower.Contains("eye") ||
+                nameLower.Contains("teeth") ||
+                nameLower.Contains("tongue") ||
+                nameLower.StartsWith("!!body") ||
+                nameLower.StartsWith("!!head"))
+            {
+                return false;
+            }
+            
+            // Include objects with clothing-related prefixes (A-, B-, H-, S-, etc.)
+            if (obj.name.Contains("-") || 
+                nameLower.Contains("clothing") ||
+                nameLower.Contains("clothes") ||
+                nameLower.Contains("outfit") ||
+                nameLower.Contains("accessory") ||
+                nameLower.Contains("wearable") ||
+                nameLower.Contains("hair") ||
+                nameLower.Contains("shoes") ||
+                nameLower.Contains("shirt") ||
+                nameLower.Contains("pants") ||
+                nameLower.Contains("skirt") ||
+                nameLower.Contains("glasses") ||
+                nameLower.Contains("hat") ||
+                nameLower.Contains("jewelry") ||
+                nameLower.Contains("necklace") ||
+                nameLower.Contains("bracelet") ||
+                nameLower.Contains("ring") ||
+                nameLower.Contains("garter") ||
+                nameLower.Contains("piercing") ||
+                nameLower.Contains("collar") ||
+                nameLower.Contains("choker"))
+            {
+                return true;
+            }
+            
+            // Include if it has children that look like outfit objects (e.g., folders like "A-Clothing")
+            // This catches folder structures
+            if (obj.childCount > 0)
+            {
+                foreach (Transform child in obj)
+                {
+                    string childNameLower = child.name.ToLowerInvariant();
+                    if (childNameLower.Contains("clothing") ||
+                        childNameLower.Contains("clothes") ||
+                        childNameLower.Contains("accessory") ||
+                        child.name.Contains("-"))
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            // Default: include if it's a direct child of avatar (likely clothing folder)
+            if (obj.parent != null && obj.parent == avatarDescriptor?.transform)
+            {
+                // Exclude system objects (already handled by ShouldSkipCapture)
+                return true;
+            }
+            
+            // Include if parent is likely an outfit folder
+            Transform parent = obj.parent;
+            if (parent != null && parent != avatarDescriptor?.transform)
+            {
+                string parentNameLower = parent.name.ToLowerInvariant();
+                if (parentNameLower.Contains("clothing") ||
+                    parentNameLower.Contains("clothes") ||
+                    parentNameLower.Contains("outfit") ||
+                    parentNameLower.Contains("accessory") ||
+                    parent.name.Contains("-"))
+                {
+                    return true;
+                }
+            }
+            
+            return false;
         }
 
         private bool ShouldSkipCapture(Transform target)
@@ -1235,9 +1393,10 @@ namespace Soph.AvatarOutfitManager.Editor
 
         private void GenerateVRChatAssets()
         {
-            if (avatarDescriptor == null || outfitRoot == null || slotData == null) return;
+            if (avatarDescriptor == null || slotData == null) return;
             if (slotData.GetConfiguredSlotCount() == 0) return;
 
+            // Outfit root is now optional - pass null to use avatar root (objects stay where they are)
             VRChatAssetGenerator.GenerateAllAssets(avatarDescriptor, outfitRoot, slotData, outputFolderPath);
         }
 
@@ -1445,6 +1604,14 @@ namespace Soph.AvatarOutfitManager.Editor
             // Select and ping in hierarchy
             Selection.activeGameObject = outfitManagerGO;
             EditorGUIUtility.PingObject(outfitManagerGO);
+
+            // Show info dialog explaining optional usage
+            EditorUtility.DisplayDialog("Soph Outfit Manager Created (Optional)",
+                $"Created '{GameObjectName}' GameObject under your avatar.\n\n" +
+                $"This folder is OPTIONAL - you can use it to organize your clothing objects, or leave them where they are.\n\n" +
+                "The Outfit Manager will automatically find all clothing/accessory objects regardless of their location.\n\n" +
+                "Simply save your outfits using the 'Save Current Visibility' button.", 
+                "OK");
 
             Debug.Log($"[Outfit Manager] Created '{GameObjectName}' GameObject in hierarchy with component. Drag your clothing items here!");
         }

@@ -34,7 +34,7 @@ namespace Soph.AvatarOutfitManager.Editor
         /// <returns>True if generation was successful.</returns>
         public static bool GenerateAllAssets(
             VRCAvatarDescriptor avatarDescriptor,
-            Transform outfitRoot,
+            Transform outfitRoot, // Now optional - if null, uses avatar root
             OutfitSlotData slotData,
             string outputFolder)
         {
@@ -43,6 +43,10 @@ namespace Soph.AvatarOutfitManager.Editor
                 EditorUtility.DisplayDialog("Validation Error", error, "OK");
                 return false;
             }
+
+            // Outfit root is now optional - use avatar root if not specified
+            Transform actualOutfitRoot = outfitRoot ?? avatarDescriptor.transform;
+            Debug.Log($"[Outfit Manager] Using {(outfitRoot != null ? $"outfit root '{outfitRoot.name}'" : "avatar root (objects stay where they are)")} for asset generation");
 
             // Ensure output folder exists
             if (!Directory.Exists(outputFolder))
@@ -61,8 +65,9 @@ namespace Soph.AvatarOutfitManager.Editor
                 EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Creating animation clips...", 0.1f);
 
                 // Generate animation clips for each configured slot
+                // Note: Objects stay where they are - we collect from avatar root, not outfit root
                 // Note: Clips always set all objects explicitly to work with both Write Defaults ON and OFF
-                var animationClips = GenerateAnimationClips(avatarDescriptor.transform, outfitRoot, slotData, outputFolder);
+                var animationClips = GenerateAnimationClips(avatarDescriptor.transform, actualOutfitRoot, slotData, outputFolder);
 
                 EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Setting up FX layer...", 0.4f);
 
@@ -175,15 +180,11 @@ namespace Soph.AvatarOutfitManager.Editor
                 return false;
             }
 
-            if (outfitRoot == null)
+            // Outfit root is now optional - objects can stay where they are under avatar root
+            // If outfitRoot is provided, it must be a child of the avatar
+            if (outfitRoot != null && !outfitRoot.IsChildOf(avatarDescriptor.transform))
             {
-                error = "Outfit Root is not assigned.";
-                return false;
-            }
-
-            if (!outfitRoot.IsChildOf(avatarDescriptor.transform))
-            {
-                error = "Outfit Root must be a child of the Avatar.";
+                error = "Outfit Root must be a child of the Avatar (or leave it empty to use avatar root).";
                 return false;
             }
 
@@ -223,10 +224,27 @@ namespace Soph.AvatarOutfitManager.Editor
                 AssetDatabase.DeleteAsset(existingClip);
             }
 
-            // Collect all outfit objects once
-            var allObjects = CollectAllGameObjects(outfitRoot);
+            // Collect all outfit objects from avatar root (objects stay where they are)
+            // We collect from avatarRoot, not outfitRoot, since objects can be anywhere in the hierarchy
+            var allObjects = CollectAllGameObjects(avatarRoot);
             
-            Debug.Log($"[Outfit Manager] Found {allObjects.Count} toggleable objects under '{outfitRoot.name}'");
+            Debug.Log($"[Outfit Manager] Found {allObjects.Count} objects in avatar hierarchy for animation clip generation");
+
+            // Build a set of all unique paths from all configured slots
+            // This ensures we track all objects that were ever saved in any outfit
+            var allTrackedPaths = new HashSet<string>();
+            foreach (var slot in slotData.slots)
+            {
+                if (slot.isConfigured)
+                {
+                    foreach (var state in slot.objectStates)
+                    {
+                        allTrackedPaths.Add(state.path);
+                    }
+                }
+            }
+            
+            Debug.Log($"[Outfit Manager] Tracking {allTrackedPaths.Count} unique outfit objects across all slots");
 
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
@@ -236,7 +254,7 @@ namespace Soph.AvatarOutfitManager.Editor
                 var clip = new AnimationClip();
                 clip.name = $"Outfit_{i}_{SanitizeFileName(slot.slotName)}";
 
-                // Create a set of active paths for this slot
+                // Create a set of active paths for this slot (paths are relative to avatarRoot)
                 var activePaths = new HashSet<string>();
                 if (slot.isConfigured)
                 {
@@ -255,13 +273,21 @@ namespace Soph.AvatarOutfitManager.Editor
                 int activeCount = 0;
                 int inactiveCount = 0;
                 int errorCount = 0;
+                int skippedCount = 0;
                 
                 foreach (var obj in allObjects)
                 {
                     if (obj == null || obj.transform == null) continue;
                     
                     string avatarRelativePath = GetRelativePath(avatarRoot, obj.transform);
-                    string outfitRelativePath = GetRelativePath(outfitRoot, obj.transform);
+                    
+                    // Only set curves for objects that were tracked in at least one outfit slot
+                    // This avoids animating body parts, armature, etc.
+                    if (!allTrackedPaths.Contains(avatarRelativePath))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
 
                     // Validate path
                     if (string.IsNullOrEmpty(avatarRelativePath))
@@ -271,7 +297,8 @@ namespace Soph.AvatarOutfitManager.Editor
                         continue;
                     }
 
-                    bool shouldBeActive = slot.isConfigured && activePaths.Contains(outfitRelativePath);
+                    // Paths in slot.objectStates are now relative to avatarRoot, not outfitRoot
+                    bool shouldBeActive = slot.isConfigured && activePaths.Contains(avatarRelativePath);
 
                     // Create curve with explicit value (1 = active, 0 = inactive)
                     var curve = new AnimationCurve();
@@ -628,9 +655,15 @@ namespace Soph.AvatarOutfitManager.Editor
                             : slotData.slots[i].slotName,
                         type = VRCExpressionsMenu.Control.ControlType.Button,
                         icon = slotIcon,
-                        // Set the Int parameter value on press
-                        parameter = new VRCExpressionsMenu.Control.Parameter { name = PARAMETER_NAME },
-                        value = i
+                        // Use subParameters to set Int parameter value for Button controls
+                        subParameters = new VRCExpressionsMenu.Control.Parameter[]
+                        {
+                            new VRCExpressionsMenu.Control.Parameter
+                            {
+                                name = PARAMETER_NAME,
+                                value = i
+                            }
+                        }
                     };
                     outfitMenu.controls.Add(buttonControl);
                 }
