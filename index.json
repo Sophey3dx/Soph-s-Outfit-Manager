@@ -6,6 +6,23 @@
   "packages": {
     "com.soph.avatar-outfit-manager": {
       "versions": {
+        "1.2.6": {
+          "name": "com.soph.avatar-outfit-manager",
+          "displayName": "Soph's Outfit Manager",
+          "version": "1.2.6",
+          "unity": "2022.3",
+          "description": "Improved detector ignores bones. Fixed NRE on drag & drop.",
+          "author": {
+            "name": "Sophey3dx",
+            "url": "https://github.com/Sophey3dx"
+          },
+          "vpmDependencies": {
+            "com.vrchat.avatars": ">=3.5.0"
+          },
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.6/com.soph.avatar-outfit-manager-1.2.6.zip",
+          "legacyFolders": {},
+          "legacyFiles": {}
+        },
         "1.2.5": {
           "name": "com.soph.avatar-outfit-manager",
           "displayName": "Soph's Outfit Manager",

@@ -513,16 +513,16 @@ namespace Soph.AvatarOutfitManager.Editor
                         DragAndDrop.AcceptDrag();
                         foreach (var obj in DragAndDrop.objectReferences)
                         {
-                            var go = obj as GameObject;
-                            if (go != null)
-                            {
-                                var descriptor = go.GetComponent<VRCAvatarDescriptor>();
-                                if (descriptor != null)
+                                var go = obj as GameObject;
+                                if (go != null && go.scene.IsValid()) // Only accept scene objects
                                 {
-                                    OneClickSetup(go);
-                                    break;
+                                    var descriptor = go.GetComponent<VRCAvatarDescriptor>();
+                                    if (descriptor != null)
+                                    {
+                                        OneClickSetup(go);
+                                        break;
+                                    }
                                 }
-                            }
                         }
                     }
                     Event.current.Use();
@@ -1652,21 +1652,46 @@ namespace Soph.AvatarOutfitManager.Editor
             
             string nameLower = obj.name.ToLowerInvariant();
             
-            // Skip body parts, armature, bones, etc.
-            if (nameLower.Contains("armature") || 
-                nameLower.Contains("body") || 
-                nameLower.Contains("head") || 
-                nameLower == "hair" || 
-                nameLower.Contains("eye") ||
-                nameLower.Contains("teeth") ||
-                nameLower.Contains("tongue") ||
-                nameLower.StartsWith("!!body") ||
-                nameLower.StartsWith("!!head"))
+            // 1. Strict Exclusion: Skip known bone names and body parts
+            // This prevents "Hips", "Spine", "Head", "Arm" from being picked up
+            string[] boneKeywords = { 
+                "armature", "root", "hips", "spine", "chest", "neck", "head", 
+                "shoulder", "arm", "hand", "finger", "leg", "foot", "toe", 
+                "eye", "jaw", "tongue", "teeth", "hair_root", "tail" 
+            };
+            
+            foreach (var keyword in boneKeywords)
+            {
+                // strict check for exact match or typical bone naming conventions (LeftLeg, RightHand)
+                if (nameLower == keyword || 
+                    nameLower.Contains(" " + keyword) || 
+                    nameLower.EndsWith(keyword))
+                {
+                    // Allow if it explicitly says "clothing" or "outfit" (e.g. "Arm Armor")
+                    if (!nameLower.Contains("clothing") && 
+                        !nameLower.Contains("outfit") && 
+                        !nameLower.Contains("armor") &&
+                        !nameLower.Contains("accessory"))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            // Exclude "Body" if it's the main body mesh (often named "Body")
+            if (nameLower == "body" || nameLower == "face")
             {
                 return false;
             }
             
-            // Include objects with clothing-related prefixes (A-, B-, H-, S-, etc.)
+            // 2. Inclusion: It has a Renderer (Mesh or Skinned)
+            // This is the strongest signal that it's a visible object
+            if (obj.GetComponent<Renderer>() != null)
+            {
+                return true;
+            }
+            
+            // 3. Inclusion: Meaningful Naming
             if (obj.name.Contains("-") || 
                 nameLower.Contains("clothing") ||
                 nameLower.Contains("clothes") ||
@@ -1678,56 +1703,33 @@ namespace Soph.AvatarOutfitManager.Editor
                 nameLower.Contains("shirt") ||
                 nameLower.Contains("pants") ||
                 nameLower.Contains("skirt") ||
+                nameLower.Contains("dress") ||
                 nameLower.Contains("glasses") ||
                 nameLower.Contains("hat") ||
                 nameLower.Contains("jewelry") ||
                 nameLower.Contains("necklace") ||
                 nameLower.Contains("bracelet") ||
                 nameLower.Contains("ring") ||
-                nameLower.Contains("garter") ||
                 nameLower.Contains("piercing") ||
-                nameLower.Contains("collar") ||
-                nameLower.Contains("choker"))
+                nameLower.Contains("prop") ||
+                nameLower.Contains("weapon"))
             {
                 return true;
             }
             
-            // Include if it has children that look like outfit objects (e.g., folders like "A-Clothing")
-            // This catches folder structures
+            // 4. Inclusion: Folder logic
+            // If it has children that look like outfit objects, it might be a container
             if (obj.childCount > 0)
             {
                 foreach (Transform child in obj)
                 {
                     string childNameLower = child.name.ToLowerInvariant();
-                    if (childNameLower.Contains("clothing") ||
-                        childNameLower.Contains("clothes") ||
-                        childNameLower.Contains("accessory") ||
-                        child.name.Contains("-"))
+                    // If immediate child is definitely clothing, this is likely a folder
+                    if (child.GetComponent<Renderer>() != null && 
+                        (childNameLower.Contains("clothing") || childNameLower.Contains("outfit") || child.name.Contains("-")))
                     {
                         return true;
                     }
-                }
-            }
-            
-            // Default: include if it's a direct child of avatar (likely clothing folder)
-            if (obj.parent != null && obj.parent == avatarDescriptor?.transform)
-            {
-                // Exclude system objects (already handled by ShouldSkipCapture)
-                return true;
-            }
-            
-            // Include if parent is likely an outfit folder
-            Transform parent = obj.parent;
-            if (parent != null && parent != avatarDescriptor?.transform)
-            {
-                string parentNameLower = parent.name.ToLowerInvariant();
-                if (parentNameLower.Contains("clothing") ||
-                    parentNameLower.Contains("clothes") ||
-                    parentNameLower.Contains("outfit") ||
-                    parentNameLower.Contains("accessory") ||
-                    parent.name.Contains("-"))
-                {
-                    return true;
                 }
             }
             
@@ -2016,12 +2018,15 @@ namespace Soph.AvatarOutfitManager.Editor
                     if (component == null)
                     {
                         component = child.gameObject.AddComponent<OutfitManagerComponent>();
-                        component.OutfitRoot = outfitRoot;
-                        if (slotData != null)
+                        if (component != null)
                         {
-                            component.SlotData = slotData;
+                            component.OutfitRoot = outfitRoot;
+                            if (slotData != null)
+                            {
+                                component.SlotData = slotData;
+                            }
+                            EditorUtility.SetDirty(component);
                         }
-                        EditorUtility.SetDirty(component);
                     }
                     
                     // Select it in hierarchy for visibility

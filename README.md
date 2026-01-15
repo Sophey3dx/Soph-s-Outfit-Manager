@@ -160,6 +160,11 @@ Or manually:
 
 ## Changelog
 
+### v1.2.6
+- **Improved Object Detection**: Bones and standard armature parts are now strictly excluded from the tracked objects list
+- **Bugfix**: Fixed NullReferenceException when dragging non-scene objects (prefabs) for setup
+- **Bugfix**: Fixed compilation errors related to Menu API usage
+
 ### v1.2.5
 - **Fixed Validation Logic**: Removed false warnings when using organization folders for outfits
 - **Fixed Icon Rendering**: Icons now correctly render for outfits in organization folders
