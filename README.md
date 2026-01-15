@@ -160,6 +160,11 @@ Or manually:
 
 ## Changelog
 
+### v1.2.5
+- **Fixed Validation Logic**: Removed false warnings when using organization folders for outfits
+- **Fixed Icon Rendering**: Icons now correctly render for outfits in organization folders
+- **Backend Improvements**: Verified and robust path tracking logic
+
 ### v1.2.4
 - **Objects stay where they are!** No need to move clothing objects - they're automatically detected from avatar hierarchy
 - **Outfit Root is now optional** - Use it for organization, or leave objects where they are
