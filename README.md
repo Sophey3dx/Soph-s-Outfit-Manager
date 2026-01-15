@@ -160,6 +160,9 @@ Or manually:
 
 ## Changelog
 
+### v1.2.8
+- **Bugfix**: Fixed compilation error in VRChatAssetGenerator.cs (missing try block)
+
 ### v1.2.7
 - **Feature**: Added Blendshape Support! Outfits now remember and restore blendshape values (e.g. sleeves rolled up).
 - **Feature**: Added "Clean Up Tracked Objects" button to automatically remove invalid bones from outfit data (fixes disappearing avatars).
