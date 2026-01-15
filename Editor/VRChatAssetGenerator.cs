@@ -711,7 +711,7 @@ namespace Soph.AvatarOutfitManager.Editor
                 {
                     // Update existing parameter
                     paramList[i].valueType = VRCExpressionParameters.ValueType.Int;
-                    paramList[i].defaultValue = 0;
+                    paramList[i].defaultValue = -1;
                     paramList[i].saved = true;
                     paramExists = true;
                     break;
@@ -725,7 +725,7 @@ namespace Soph.AvatarOutfitManager.Editor
                 {
                     name = PARAMETER_NAME,
                     valueType = VRCExpressionParameters.ValueType.Int,
-                    defaultValue = 0,
+                    defaultValue = -1,
                     saved = true,
                     networkSynced = true
                 });
@@ -751,6 +751,19 @@ namespace Soph.AvatarOutfitManager.Editor
             string submenuPath = Path.Combine(outputFolder, "Menu_Outfits.asset");
             var outfitMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             outfitMenu.controls = new List<VRCExpressionsMenu.Control>();
+
+            // Add "Reset to Default" option at the top
+            // This sets the parameter to -1, which doesn't match any outfit transition
+            // causing the avatar to stay in its default (scene) state
+            var resetControl = new VRCExpressionsMenu.Control
+            {
+                name = "Reset to Default",
+                type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                icon = menuIcon,
+                parameter = new VRCExpressionsMenu.Control.Parameter { name = PARAMETER_NAME },
+                value = -1
+            };
+            outfitMenu.controls.Add(resetControl);
 
             // Add individual toggles for each configured outfit
             // Toggle type sets and HOLDS the value (unlike Button which is momentary)

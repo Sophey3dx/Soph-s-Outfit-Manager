@@ -6,12 +6,12 @@
   "packages": {
     "com.soph.avatar-outfit-manager": {
       "versions": {
-        "1.2.9": {
+        "1.3.0": {
           "name": "com.soph.avatar-outfit-manager",
           "displayName": "Soph's Outfit Manager",
-          "version": "1.2.9",
+          "version": "1.3.0",
           "unity": "2022.3",
-          "description": "Fixed outfit toggle reverting issue.",
+          "description": "Major update: Optional outfits, Blendshapes, Hierarchy labels, Bone detection, Auto-load.",
           "author": {
             "name": "Sophey3dx",
             "url": "https://github.com/Sophey3dx"
@@ -19,41 +19,7 @@
           "vpmDependencies": {
             "com.vrchat.avatars": ">=3.5.0"
           },
-          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.9/com.soph.avatar-outfit-manager-1.2.9.zip",
-          "legacyFolders": {},
-          "legacyFiles": {}
-        },
-        "1.2.8": {
-          "name": "com.soph.avatar-outfit-manager",
-          "displayName": "Soph's Outfit Manager",
-          "version": "1.2.8",
-          "unity": "2022.3",
-          "description": "Fixed compilation error.",
-          "author": {
-            "name": "Sophey3dx",
-            "url": "https://github.com/Sophey3dx"
-          },
-          "vpmDependencies": {
-            "com.vrchat.avatars": ">=3.5.0"
-          },
-          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.8/com.soph.avatar-outfit-manager-1.2.8.zip",
-          "legacyFolders": {},
-          "legacyFiles": {}
-        },
-        "1.2.7": {
-          "name": "com.soph.avatar-outfit-manager",
-          "displayName": "Soph's Outfit Manager",
-          "version": "1.2.7",
-          "unity": "2022.3",
-          "description": "Added Blendshape support and Cleanup Tool.",
-          "author": {
-            "name": "Sophey3dx",
-            "url": "https://github.com/Sophey3dx"
-          },
-          "vpmDependencies": {
-            "com.vrchat.avatars": ">=3.5.0"
-          },
-          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.7/com.soph.avatar-outfit-manager-1.2.7.zip",
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.3.0/com.soph.avatar-outfit-manager-1.3.0.zip",
           "legacyFolders": {},
           "legacyFiles": {}
         },

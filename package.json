@@ -1,7 +1,7 @@
 {
   "name": "com.soph.avatar-outfit-manager",
   "displayName": "Soph's Outfit Manager",
-  "version": "1.2.9",
+  "version": "1.3.0",
   "description": "A VRChat avatar outfit management tool that allows saving and loading outfit presets with automatic VRChat asset generation.",
   "unity": "2022.3",
   "unityRelease": "6f1",

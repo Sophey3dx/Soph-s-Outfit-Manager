@@ -160,13 +160,19 @@ Or manually:
 
 ## Changelog
 
+### v1.3.0
+- **Feature**: Outfits are now optional! Avatar starts with default clothing, outfits can be toggled on/off.
+- **Feature**: Added "Reset to Default" option in menu to return to original clothing state.
+- **Feature**: Added Blendshape support - outfits remember and restore blendshape values.
+- **Feature**: Added "Clean Up Tracked Objects" button to remove invalid bones from data.
+- **Feature**: Hierarchy labels now show which outfit each clothing item belongs to!
+- **Improvement**: Last used avatar is now auto-loaded when reopening Unity.
+- **Improvement**: Improved bone detection using Unity's Animator component (100% accurate for humanoid avatars).
+- **Improvement**: Fixed camera positioning for icon rendering to reliably show front of avatar.
+- **Bugfix**: Fixed outfit toggle reverting to first outfit.
+- **Bugfix**: Fixed compilation errors.
+
 ### v1.2.9
-- **Bugfix**: Fixed outfit toggle reverting to first outfit. Changed menu controls from Button to Toggle type so the parameter value persists.
-
-### v1.2.8
-- **Bugfix**: Fixed compilation error in VRChatAssetGenerator.cs (missing try block)
-
-### v1.2.7
 - **Feature**: Added Blendshape Support! Outfits now remember and restore blendshape values (e.g. sleeves rolled up).
 - **Feature**: Added "Clean Up Tracked Objects" button to automatically remove invalid bones from outfit data (fixes disappearing avatars).
 - **Improvement**: Added Blendshape support to Icon generation.

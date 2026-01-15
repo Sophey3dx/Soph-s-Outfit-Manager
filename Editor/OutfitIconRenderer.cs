@@ -321,91 +321,23 @@ namespace Soph.AvatarOutfitManager.Editor
 
         private static Vector3 DetermineAvatarForward(Transform avatarRoot)
         {
-            // Strategy 1: Try to find head/eyes to determine which way the avatar is facing
-            var animator = avatarRoot.GetComponent<Animator>();
+            // VRChat avatars use Unity's humanoid standard:
+            // - Avatar's local +Z axis (transform.forward) points forward (where the face is)
+            // - Camera should be placed in front of the avatar (opposite of forward direction)
             
-            if (animator != null && animator.isHuman)
+            // Use the avatar's forward direction directly
+            Vector3 avatarForward = avatarRoot.forward;
+            
+            // Project onto horizontal plane to ignore any tilt
+            Vector3 horizontalForward = Vector3.ProjectOnPlane(avatarForward, Vector3.up).normalized;
+            
+            // If the projection is too small (avatar is looking straight up/down), use world forward
+            if (horizontalForward.magnitude < 0.1f)
             {
-                // Use head bone - it should point forward
-                var head = animator.GetBoneTransform(HumanBodyBones.Head);
-                if (head != null)
-                {
-                    // Head forward direction
-                    Vector3 headForward = head.forward;
-                    
-                    // Check if head is pointing in a reasonable direction (not straight up/down)
-                    if (Mathf.Abs(Vector3.Dot(headForward, Vector3.up)) < 0.9f)
-                    {
-                        // Project head forward onto horizontal plane (XZ plane)
-                        Vector3 horizontalForward = Vector3.ProjectOnPlane(headForward, Vector3.up).normalized;
-                        if (horizontalForward.magnitude > 0.1f)
-                        {
-                            // Ensure we're using the direction that points away from the camera view
-                            // Most avatars face -Z in Unity, so if head points -Z, that's forward
-                            if (Vector3.Dot(horizontalForward, Vector3.forward) < 0)
-                            {
-                                return horizontalForward;
-                            }
-                            else
-                            {
-                                // Head is pointing +Z, which is backward for most avatars, so flip
-                                return -horizontalForward;
-                            }
-                        }
-                    }
-                }
-                
-                // Fallback: use chest/spine to determine facing
-                var chest = animator.GetBoneTransform(HumanBodyBones.Chest);
-                if (chest != null)
-                {
-                    Vector3 chestForward = Vector3.ProjectOnPlane(chest.forward, Vector3.up).normalized;
-                    if (chestForward.magnitude > 0.1f)
-                    {
-                        // Same logic: if chest points -Z, that's forward
-                        if (Vector3.Dot(chestForward, Vector3.forward) < 0)
-                        {
-                            return chestForward;
-                        }
-                        else
-                        {
-                            return -chestForward;
-                        }
-                    }
-                }
+                horizontalForward = Vector3.forward;
             }
             
-            // Strategy 2: Use Scene View camera direction as reference (if available)
-            #if UNITY_EDITOR
-            if (UnityEditor.SceneView.lastActiveSceneView != null)
-            {
-                var sceneView = UnityEditor.SceneView.lastActiveSceneView;
-                Vector3 cameraToAvatar = (avatarRoot.position - sceneView.camera.transform.position).normalized;
-                Vector3 horizontalCameraDir = Vector3.ProjectOnPlane(cameraToAvatar, Vector3.up).normalized;
-                
-                if (horizontalCameraDir.magnitude > 0.1f)
-                {
-                    // Camera is looking at avatar from this direction, so avatar's front is opposite
-                    return -horizontalCameraDir;
-                }
-            }
-            #endif
-            
-            // Strategy 3: Final fallback - use avatar root transform direction
-            // Most VRChat avatars face -Z in Unity (forward is -Z)
-            Vector3 rootForward = avatarRoot.forward;
-            Vector3 horizontalRootForward = Vector3.ProjectOnPlane(rootForward, Vector3.up).normalized;
-            
-            // If avatar forward is pointing mostly in +Z (backward for most avatars), flip it
-            // We want the direction that points toward -Z (forward for most avatars)
-            if (Vector3.Dot(horizontalRootForward, Vector3.forward) > 0.1f)
-            {
-                // Avatar is pointing +Z (backward), so flip to -Z (forward)
-                return -horizontalRootForward;
-            }
-            
-            // Default: assume avatar faces -Z (most common in VRChat)
-            return horizontalRootForward.magnitude > 0.1f ? horizontalRootForward : -Vector3.forward;
+            return horizontalForward;
         }
 
         private static void ApplyOutfitVisibility(Transform outfitRoot, OutfitSlot slot)

@@ -1465,7 +1465,26 @@ namespace Soph.AvatarOutfitManager.Editor
     
     private void LoadSavedData()
     {
-        // Try to restore last used avatar from EditorPrefs
+        // Option 1: Try to find avatar by name in current scene (preferred for most users)
+        string lastAvatarName = EditorPrefs.GetString("SophOutfitManager_LastAvatarName", "");
+        if (!string.IsNullOrEmpty(lastAvatarName))
+        {
+            // Search all avatars in scene
+            var allAvatars = FindObjectsOfType<VRCAvatarDescriptor>();
+            foreach (var avatar in allAvatars)
+            {
+                if (avatar.gameObject.name == lastAvatarName)
+                {
+                    avatarDescriptor = avatar;
+                    AutoDetectOutfitRoot();
+                    LoadSlotDataForAvatar();
+                    Debug.Log($"[Outfit Manager] Auto-loaded avatar '{lastAvatarName}' from scene.");
+                    return;
+                }
+            }
+        }
+
+        // Option 2: Try to restore from GUID (project asset prefabs)
         string lastAvatarGuid = EditorPrefs.GetString("SophOutfitManager_LastAvatarGuid", "");
         if (!string.IsNullOrEmpty(lastAvatarGuid))
         {
@@ -1481,6 +1500,8 @@ namespace Soph.AvatarOutfitManager.Editor
                         avatarDescriptor = descriptor;
                         AutoDetectOutfitRoot();
                         LoadSlotDataForAvatar();
+                        Debug.Log($"[Outfit Manager] Auto-loaded avatar from asset: {avatarPath}");
+                        return;
                     }
                 }
             }
@@ -1492,6 +1513,10 @@ namespace Soph.AvatarOutfitManager.Editor
         // Save avatar reference for next time
         if (avatarDescriptor != null)
         {
+            // Always save the avatar name for scene-based restoration
+            EditorPrefs.SetString("SophOutfitManager_LastAvatarName", avatarDescriptor.gameObject.name);
+            
+            // Also save GUID for prefab-based restoration (if available)
             string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
             if (!string.IsNullOrEmpty(avatarGuid))
             {
@@ -1691,12 +1716,39 @@ namespace Soph.AvatarOutfitManager.Editor
             
             string nameLower = obj.name.ToLowerInvariant();
             
-            // 1. Strict Exclusion: Skip known bone names and body parts
+            // 0. Check if this is a bone using Unity's Animator (most reliable method)
+            // Find the avatar's Animator and check if this transform is mapped to a humanoid bone
+            if (avatarDescriptor != null)
+            {
+                var animator = avatarDescriptor.GetComponent<Animator>();
+                if (animator != null && animator.isHuman)
+                {
+                    // Check all humanoid bones
+                    foreach (HumanBodyBones bone in System.Enum.GetValues(typeof(HumanBodyBones)))
+                    {
+                        if (bone == HumanBodyBones.LastBone) continue;
+                        
+                        try
+                        {
+                            Transform boneTransform = animator.GetBoneTransform(bone);
+                            if (boneTransform == obj)
+                            {
+                                // This is a humanoid bone - skip it
+                                return false;
+                            }
+                        }
+                        catch { /* Some bones may not be mapped */ }
+                    }
+                }
+            }
+            
+            // 1. Strict Exclusion: Skip known bone names and body parts (fallback for non-humanoid)
             // This prevents "Hips", "Spine", "Head", "Arm" from being picked up
             string[] boneKeywords = { 
                 "armature", "root", "hips", "spine", "chest", "neck", "head", 
                 "shoulder", "arm", "hand", "finger", "leg", "foot", "toe", 
-                "eye", "jaw", "tongue", "teeth", "hair_root", "tail" 
+                "eye", "jaw", "tongue", "teeth", "hair_root", "tail",
+                "breast", "butt", "thigh", "calf", "pelvis", "clavicle", "elbow", "knee", "ankle", "wrist"
             };
             
             foreach (var keyword in boneKeywords)
@@ -1704,7 +1756,11 @@ namespace Soph.AvatarOutfitManager.Editor
                 // strict check for exact match or typical bone naming conventions (LeftLeg, RightHand)
                 if (nameLower == keyword || 
                     nameLower.Contains(" " + keyword) || 
-                    nameLower.EndsWith(keyword))
+                    nameLower.EndsWith(keyword) ||
+                    nameLower.StartsWith(keyword + " ") ||
+                    nameLower.StartsWith(keyword + "_") ||
+                    nameLower.EndsWith("_" + keyword) ||
+                    nameLower.Contains("_" + keyword + "_"))
                 {
                     // Allow if it explicitly says "clothing" or "outfit" (e.g. "Arm Armor")
                     if (!nameLower.Contains("clothing") && 
