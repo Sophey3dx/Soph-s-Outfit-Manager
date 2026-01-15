@@ -5,6 +5,22 @@ using UnityEngine;
 namespace Soph.AvatarOutfitManager.Editor
 {
     /// <summary>
+    /// Represents the state of a single BlendShape on a SkinnedMeshRenderer.
+    /// </summary>
+    [Serializable]
+    public class BlendShapeState
+    {
+        public string name;
+        public float value;
+
+        public BlendShapeState(string name, float value)
+        {
+            this.name = name;
+            this.value = value;
+        }
+    }
+
+    /// <summary>
     /// Represents the active state of a single GameObject within an outfit.
     /// Stores the relative path from the outfit root and whether the object should be active.
     /// </summary>
@@ -22,16 +38,23 @@ namespace Soph.AvatarOutfitManager.Editor
         /// </summary>
         public bool isActive;
 
+        /// <summary>
+        /// List of blendshape values for this object (if it has a SkinnedMeshRenderer).
+        /// </summary>
+        public List<BlendShapeState> blendShapes;
+
         public GameObjectState()
         {
             path = string.Empty;
             isActive = false;
+            blendShapes = new List<BlendShapeState>();
         }
 
         public GameObjectState(string path, bool isActive)
         {
             this.path = path;
             this.isActive = isActive;
+            blendShapes = new List<BlendShapeState>();
         }
     }
 
@@ -111,6 +134,46 @@ namespace Soph.AvatarOutfitManager.Editor
             #else
             return null;
             #endif
+        }
+
+        /// <summary>
+        /// Removes tracked objects that match known invalid keywords (bones).
+        /// </summary>
+        public int Sanitize()
+        {
+            if (trackedObjectPaths == null) return 0;
+
+            string[] boneKeywords = { 
+                "armature", "root", "hips", "spine", "chest", "neck", "head", 
+                "shoulder", "arm", "hand", "finger", "leg", "foot", "toe", 
+                "eye", "jaw", "tongue", "teeth", "hair_root", "tail" 
+            };
+
+            int removedCount = 0;
+            for (int i = trackedObjectPaths.Count - 1; i >= 0; i--)
+            {
+                string path = trackedObjectPaths[i].ToLowerInvariant();
+                foreach (var keyword in boneKeywords)
+                {
+                    // Basic heuristic: if it ends with a bone name, it's likely a bone.
+                    // But if it contains "clothing", keep it.
+                    bool isLikelyBone = path.EndsWith("/" + keyword) || path.EndsWith(" " + keyword) || path == keyword;
+                    
+                    if (isLikelyBone)
+                    {
+                        if (!path.Contains("clothing") && 
+                            !path.Contains("outfit") && 
+                            !path.Contains("armor") &&
+                            !path.Contains("accessory"))
+                        {
+                            trackedObjectPaths.RemoveAt(i);
+                            removedCount++;
+                            break;
+                        }
+                    }
+                }
+            }
+            return removedCount;
         }
     }
 

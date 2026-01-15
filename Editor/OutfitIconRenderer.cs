@@ -420,6 +420,30 @@ namespace Soph.AvatarOutfitManager.Editor
                 if (pathToTransform.TryGetValue(state.path, out Transform obj))
                 {
                     obj.gameObject.SetActive(state.isActive);
+                    
+                    // Apply blendshapes if available
+                    var smr = obj.GetComponent<SkinnedMeshRenderer>();
+                    if (smr != null && smr.sharedMesh != null)
+                    {
+                        // 1. Reset all to 0
+                        for (int i = 0; i < smr.sharedMesh.blendShapeCount; i++)
+                        {
+                            smr.SetBlendShapeWeight(i, 0f);
+                        }
+
+                        // 2. Apply stored values
+                        if (state.blendShapes != null)
+                        {
+                            foreach (var shape in state.blendShapes)
+                            {
+                                int index = smr.sharedMesh.GetBlendShapeIndex(shape.name);
+                                if (index != -1)
+                                {
+                                    smr.SetBlendShapeWeight(index, shape.value);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

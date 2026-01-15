@@ -300,6 +300,8 @@ namespace Soph.AvatarOutfitManager.Editor
             // Build a set of all unique paths from all configured slots
             // This ensures we track all objects that were ever saved in any outfit
             var allTrackedPaths = new HashSet<string>();
+            var allTrackedBlendShapes = new Dictionary<string, HashSet<string>>(); // Path -> Set<ShapeName>
+
             foreach (var slot in slotData.slots)
             {
                 if (slot.isConfigured)
@@ -307,11 +309,25 @@ namespace Soph.AvatarOutfitManager.Editor
                     foreach (var state in slot.objectStates)
                     {
                         allTrackedPaths.Add(state.path);
+                        
+                        // Collect blendshapes
+                        if (state.blendShapes != null && state.blendShapes.Count > 0)
+                        {
+                            if (!allTrackedBlendShapes.ContainsKey(state.path))
+                            {
+                                allTrackedBlendShapes[state.path] = new HashSet<string>();
+                            }
+                            
+                            foreach (var shape in state.blendShapes)
+                            {
+                                allTrackedBlendShapes[state.path].Add(shape.name);
+                            }
+                        }
                     }
                 }
             }
             
-            Debug.Log($"[Outfit Manager] Tracking {allTrackedPaths.Count} unique outfit objects across all slots");
+            Debug.Log($"[Outfit Manager] Tracking {allTrackedPaths.Count} objects and blendshapes across all slots");
 
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
@@ -372,18 +388,48 @@ namespace Soph.AvatarOutfitManager.Editor
                     float value = shouldBeActive ? 1f : 0f;
                     curve.AddKey(0f, value);
                     
-                    try
-                    {
-                        // Set the curve - this explicitly sets the GameObject's active state
-                        clip.SetCurve(avatarRelativePath, typeof(GameObject), "m_IsActive", curve);
-                        
-                        if (shouldBeActive) activeCount++;
+                if (shouldBeActive) activeCount++;
                         else inactiveCount++;
                     }
                     catch (System.Exception ex)
                     {
                         Debug.LogError($"[Outfit Manager] Failed to set curve for '{obj.name}' (path: '{avatarRelativePath}'): {ex.Message}");
                         errorCount++;
+                    }
+
+                    // Handle BlendShapes
+                    if (allTrackedBlendShapes.TryGetValue(avatarRelativePath, out HashSet<string> shapesToAnimate))
+                    {
+                        // Find this object's state in the current slot
+                        var objState = slot.objectStates.Find(s => s.path == avatarRelativePath);
+                        
+                        foreach (string shapeName in shapesToAnimate)
+                        {
+                            float shapeValue = 0f; // Default to 0 (reset)
+                            
+                            // If this slot has a value for this shape, use it
+                            if (objState != null && objState.blendShapes != null)
+                            {
+                                var shapeState = objState.blendShapes.Find(bs => bs.name == shapeName);
+                                if (shapeState != null)
+                                {
+                                    shapeValue = shapeState.value;
+                                }
+                            }
+                            
+                            AnimationCurve shapeCurve = new AnimationCurve();
+                            shapeCurve.AddKey(0f, shapeValue);
+                            
+                            try
+                            {
+                                clip.SetCurve(avatarRelativePath, typeof(SkinnedMeshRenderer), $"blendShape.{shapeName}", shapeCurve);
+                            }
+                            catch (System.Exception ex)
+                            {
+                                Debug.LogError($"[Outfit Manager] Failed to set blendshape curve '{shapeName}' for '{obj.name}': {ex.Message}");
+                                errorCount++;
+                            }
+                        }
                     }
                 }
                 

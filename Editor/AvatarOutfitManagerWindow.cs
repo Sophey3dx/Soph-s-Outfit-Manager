@@ -1187,6 +1187,30 @@ namespace Soph.AvatarOutfitManager.Editor
 
                 GUI.backgroundColor = Color.white;
                 GUI.enabled = true;
+                
+                EditorGUILayout.Space(5);
+                
+                // Maintenance Tool
+                if (GUILayout.Button("Clean Up Tracked Objects (Fix Disappearing Items)", EditorStyles.miniButton))
+                {
+                    if (EditorUtility.DisplayDialog("Clean Up Data", 
+                        "This will scan all slots and remove objects that are likely bones (e.g. Hips, Spine) which may have been incorrectly added by previous versions.\n\n" +
+                        "This fixes issues where parts of the avatar disappear when switching outfits.", 
+                        "Clean Up", "Cancel"))
+                    {
+                        int removed = 0;
+                        if (slotData != null && slotData.slots != null)
+                        {
+                            foreach (var slot in slotData.slots)
+                            {
+                                if (slot != null) removed += slot.Sanitize();
+                            }
+                            EditorUtility.SetDirty(slotData);
+                            AssetDatabase.SaveAssets();
+                        }
+                        EditorUtility.DisplayDialog("Complete", $"Removed {removed} invalid tracked objects (bones).", "OK");
+                    }
+                }
 
                 if (configuredCount == 0)
                 {
@@ -1561,6 +1585,21 @@ namespace Soph.AvatarOutfitManager.Editor
                         path = path,
                         isActive = obj.gameObject.activeSelf
                     });
+                    
+                    // Capture BlendShapes
+                    var smr = obj.GetComponent<SkinnedMeshRenderer>();
+                    if (smr != null && smr.sharedMesh != null)
+                    {
+                        var state = currentSlot.objectStates[currentSlot.objectStates.Count - 1];
+                        for (int i = 0; i < smr.sharedMesh.blendShapeCount; i++)
+                        {
+                            float weight = smr.GetBlendShapeWeight(i);
+                            if (weight > 0.01f) // Only capture non-zero values
+                            {
+                                state.blendShapes.Add(new BlendShapeState(smr.sharedMesh.GetBlendShapeName(i), weight));
+                            }
+                        }
+                    }
                     savedCount++;
                 }
                 else
@@ -1803,6 +1842,31 @@ namespace Soph.AvatarOutfitManager.Editor
                     {
                         Undo.RecordObject(obj.gameObject, "Load Outfit Slot");
                         obj.gameObject.SetActive(state.isActive);
+                        
+                        // Restore BlendShapes
+                        var smr = obj.GetComponent<SkinnedMeshRenderer>();
+                        if (smr != null && smr.sharedMesh != null)
+                        {
+                            // 1. Reset all to 0 first (Clean slate for preview)
+                            for (int i = 0; i < smr.sharedMesh.blendShapeCount; i++)
+                            {
+                                smr.SetBlendShapeWeight(i, 0f);
+                            }
+                            
+                            // 2. Apply captured values
+                            if (state.blendShapes != null)
+                            {
+                                foreach (var shape in state.blendShapes)
+                                {
+                                    int index = smr.sharedMesh.GetBlendShapeIndex(shape.name);
+                                    if (index != -1)
+                                    {
+                                        smr.SetBlendShapeWeight(index, shape.value);
+                                    }
+                                }
+                            }
+                        }
+                        
                         loadedCount++;
                     }
                 }
