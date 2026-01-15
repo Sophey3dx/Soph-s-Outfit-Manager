@@ -59,6 +59,21 @@ namespace Soph.AvatarOutfitManager.Editor
     }
 
     /// <summary>
+    /// Defines the foot position type for an outfit (for heels vs flat shoes).
+    /// </summary>
+    public enum FootType
+    {
+        /// <summary>Auto-detect based on shoe names (heel, sneaker, etc.)</summary>
+        Auto,
+        /// <summary>Force flat feet position</summary>
+        Flat,
+        /// <summary>Force heels/angled feet position</summary>
+        Heels,
+        /// <summary>Don't animate foot parameter for this outfit</summary>
+        None
+    }
+
+    /// <summary>
     /// Represents a single outfit slot containing the visibility states of all tracked GameObjects.
     /// VRChat avatars support toggling GameObject active states via animations.
     /// </summary>
@@ -93,6 +108,11 @@ namespace Soph.AvatarOutfitManager.Editor
         /// Used in the Editor preview and VRChat Expression Menu.
         /// </summary>
         public string iconPath;
+
+        /// <summary>
+        /// The foot position type for this outfit (flat, heels, or auto-detect).
+        /// </summary>
+        public FootType footType = FootType.Auto;
 
         public OutfitSlot()
         {
@@ -209,6 +229,22 @@ namespace Soph.AvatarOutfitManager.Editor
         /// Path to the outfit root GameObject relative to the avatar root.
         /// </summary>
         public string outfitRootPath;
+
+        /// <summary>
+        /// Name of the foot/heel parameter on this avatar (e.g., "FlatFeet", "HeelHeight").
+        /// Empty = no foot parameter detected/configured.
+        /// </summary>
+        public string footParameterName = "";
+
+        /// <summary>
+        /// Value to set for flat feet position.
+        /// </summary>
+        public float footFlatValue = 0f;
+
+        /// <summary>
+        /// Value to set for heels position.
+        /// </summary>
+        public float footHeelValue = 1f;
 
         private void OnEnable()
         {

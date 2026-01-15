@@ -32,6 +32,7 @@ namespace Soph.AvatarOutfitManager.Editor
 
         // Icon Rendering Settings
         private bool showIconSettings = false;
+        private bool showFootSettings = false;
         private IconCameraSettings iconCameraSettings = new IconCameraSettings();
         private int selectedCameraPreset = 0;
         private readonly string[] cameraPresetNames = { "Custom", "Portrait", "Full Body", "3/4 View" };
@@ -1180,6 +1181,49 @@ namespace Soph.AvatarOutfitManager.Editor
                 GUI.enabled = configuredCount > 0;
                 GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
 
+                // Foot Settings Section
+                EditorGUILayout.Space(5);
+                showFootSettings = EditorGUILayout.Foldout(showFootSettings, "Foot Settings (Heels/Flat)", true);
+                if (showFootSettings)
+                {
+                    EditorGUI.indentLevel++;
+                    
+                    EditorGUILayout.BeginHorizontal();
+                    slotData.footParameterName = EditorGUILayout.TextField("Foot Parameter", slotData.footParameterName);
+                    if (GUILayout.Button("Detect", GUILayout.Width(60)))
+                    {
+                        string detected = DetectFootParameter();
+                        if (!string.IsNullOrEmpty(detected))
+                        {
+                            slotData.footParameterName = detected;
+                            EditorUtility.SetDirty(slotData);
+                            Debug.Log($"[Outfit Manager] Detected foot parameter: {detected}");
+                        }
+                        else
+                        {
+                            EditorUtility.DisplayDialog("Not Found", "No common foot parameter found on this avatar.\n\nTry checking your avatar's Expression Parameters for names like 'FlatFeet', 'Heels', or 'HeelHeight'.", "OK");
+                        }
+                    }
+                    EditorGUILayout.EndHorizontal();
+                    
+                    if (!string.IsNullOrEmpty(slotData.footParameterName))
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        slotData.footFlatValue = EditorGUILayout.FloatField("Flat Value", slotData.footFlatValue, GUILayout.Width(200));
+                        slotData.footHeelValue = EditorGUILayout.FloatField("Heel Value", slotData.footHeelValue, GUILayout.Width(200));
+                        EditorGUILayout.EndHorizontal();
+                        
+                        EditorGUILayout.HelpBox("Set foot type per slot in the slot details section.", MessageType.Info);
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("Click 'Detect' to find your avatar's foot parameter, or enter it manually.", MessageType.Info);
+                    }
+                    
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUILayout.Space(5);
+
                 if (GUILayout.Button(Tips.Generate, GUILayout.Height(40)))
                 {
                     GenerateVRChatAssets();
@@ -2209,6 +2253,88 @@ namespace Soph.AvatarOutfitManager.Editor
                 CountToggleablesRecursive(child, ref count);
             }
         }
+
+        #region Foot Detection
+
+        private static readonly string[] CommonFootParameters = {
+            "FlatFeet", "Flat Feet", "Heels", "HeelHeight", "Heel Height",
+            "FootType", "Foot Type", "FlatFoot", "Flat Foot", "HeelToggle",
+            "Heel", "Flat", "Feet", "FootAngle"
+        };
+
+        private static readonly string[] HeelKeywords = {
+            "heel", "highheel", "stiletto", "pump", "wedge", "platform"
+        };
+
+        private static readonly string[] FlatKeywords = {
+            "sneaker", "flat", "sandal", "loafer", "slipper", "barefoot", "boot"
+        };
+
+        private string DetectFootParameter()
+        {
+            if (avatarDescriptor == null) return null;
+            
+            var expressionParams = avatarDescriptor.expressionParameters;
+            if (expressionParams == null || expressionParams.parameters == null) return null;
+            
+            foreach (var param in expressionParams.parameters)
+            {
+                if (string.IsNullOrEmpty(param.name)) continue;
+                
+                string paramLower = param.name.ToLowerInvariant().Replace(" ", "").Replace("_", "");
+                foreach (var known in CommonFootParameters)
+                {
+                    string knownNorm = known.ToLowerInvariant().Replace(" ", "").Replace("_", "");
+                    if (paramLower.Contains(knownNorm) || knownNorm.Contains(paramLower))
+                    {
+                        return param.name;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Detects foot type from shoe names in an outfit slot.
+        /// </summary>
+        public static FootType DetectFootTypeFromShoes(OutfitSlot slot)
+        {
+            if (slot == null || slot.objectStates == null) return FootType.None;
+            
+            foreach (var state in slot.objectStates)
+            {
+                if (!state.isActive) continue;
+                string pathLower = state.path.ToLowerInvariant();
+                
+                // Check for heel keywords first (more specific)
+                foreach (var keyword in HeelKeywords)
+                {
+                    if (pathLower.Contains(keyword))
+                    {
+                        return FootType.Heels;
+                    }
+                }
+            }
+            
+            // Check for flat keywords if no heels found
+            foreach (var state in slot.objectStates)
+            {
+                if (!state.isActive) continue;
+                string pathLower = state.path.ToLowerInvariant();
+                
+                foreach (var keyword in FlatKeywords)
+                {
+                    if (pathLower.Contains(keyword))
+                    {
+                        return FootType.Flat;
+                    }
+                }
+            }
+            
+            return FootType.None;
+        }
+
+        #endregion
 
         #endregion
     }

@@ -160,6 +160,12 @@ Or manually:
 
 ## Changelog
 
+### v1.3.1
+- **Feature**: Universal Heel/Flat Foot System! Automatically switches foot position based on shoe type.
+  - Auto-detects foot parameter from avatar (FlatFeet, Heels, etc.)
+  - Auto-detects shoe type from object names (heel, sneaker, boot)
+  - Manual override available per outfit slot
+
 ### v1.3.0
 - **Feature**: Outfits are now optional! Avatar starts with default clothing, outfits can be toggled on/off.
 - **Feature**: Added "Reset to Default" option in menu to return to original clothing state.

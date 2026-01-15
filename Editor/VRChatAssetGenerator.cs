@@ -443,6 +443,53 @@ namespace Soph.AvatarOutfitManager.Editor
                     Debug.LogWarning($"[Outfit Manager] Clip '{clip.name}' had {errorCount} errors setting curves");
                 }
                 
+                // Animate foot parameter if configured
+                if (!string.IsNullOrEmpty(slotData.footParameterName))
+                {
+                    FootType footType = slot.footType;
+                    
+                    // Auto-detect from shoe names if set to Auto
+                    if (footType == FootType.Auto)
+                    {
+                        footType = AvatarOutfitManagerWindow.DetectFootTypeFromShoes(slot);
+                    }
+                    
+                    if (footType == FootType.Flat || footType == FootType.Heels)
+                    {
+                        float footValue = footType == FootType.Heels 
+                            ? slotData.footHeelValue 
+                            : slotData.footFlatValue;
+                        
+                        // Find any SkinnedMeshRenderer that might have the blendshape
+                        // Foot parameters are typically on the Body mesh
+                        foreach (Transform child in avatarRoot.GetComponentsInChildren<Transform>(true))
+                        {
+                            var smr = child.GetComponent<SkinnedMeshRenderer>();
+                            if (smr != null && smr.sharedMesh != null)
+                            {
+                                int shapeIndex = smr.sharedMesh.GetBlendShapeIndex(slotData.footParameterName);
+                                if (shapeIndex != -1)
+                                {
+                                    string smrPath = GetRelativePath(avatarRoot, child);
+                                    AnimationCurve footCurve = new AnimationCurve();
+                                    footCurve.AddKey(0f, footValue);
+                                    
+                                    try
+                                    {
+                                        clip.SetCurve(smrPath, typeof(SkinnedMeshRenderer), $"blendShape.{slotData.footParameterName}", footCurve);
+                                        Debug.Log($"[Outfit Manager] Set foot parameter '{slotData.footParameterName}' = {footValue} for clip '{clip.name}'");
+                                    }
+                                    catch (System.Exception ex)
+                                    {
+                                        Debug.LogError($"[Outfit Manager] Failed to set foot curve: {ex.Message}");
+                                    }
+                                    break; // Only need to set it once
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 Debug.Log($"[Outfit Manager] Generated clip '{clip.name}': {activeCount} active, {inactiveCount} inactive objects (errors: {errorCount})");
 
                 // Save clip
@@ -522,10 +569,29 @@ namespace Soph.AvatarOutfitManager.Editor
                 defaultState = states[0];
             }
 
+            // Create an "Empty" state for the reset/default case (parameter = -1)
+            // This state has no animation, so clothing stays at scene default
+            var emptyState = layer.stateMachine.AddState("Default (No Outfit)", new Vector3(center.x, center.y - 150, 0));
+            emptyState.writeDefaultValues = useWriteDefaults;
+            // No motion assigned - clothing stays at default
+            
+            // Make the empty state the actual default state
+            // This way, avatar spawns with default clothing, not outfit 0
+            layer.stateMachine.defaultState = emptyState;
+            Debug.Log($"[Outfit Manager] Created 'Default (No Outfit)' state as animator default");
+
+            // Add transition from Any State to Empty state when parameter == -1
+            var anyToEmptyTransition = layer.stateMachine.AddAnyStateTransition(emptyState);
+            anyToEmptyTransition.duration = 0f;
+            anyToEmptyTransition.exitTime = 0f;
+            anyToEmptyTransition.hasExitTime = false;
+            anyToEmptyTransition.hasFixedDuration = true;
+            anyToEmptyTransition.AddCondition(AnimatorConditionMode.Equals, -1, PARAMETER_NAME);
+            anyToEmptyTransition.canTransitionToSelf = false;
+
             if (defaultState != null)
             {
-                layer.stateMachine.defaultState = defaultState;
-                Debug.Log($"[Outfit Manager] Set default state to: {defaultState.name}");
+                Debug.Log($"[Outfit Manager] First outfit state is: {defaultState.name}");
             }
 
             // Create transitions: Any State -> Each Outfit State
