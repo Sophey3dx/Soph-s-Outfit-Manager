@@ -388,7 +388,12 @@ namespace Soph.AvatarOutfitManager.Editor
                     float value = shouldBeActive ? 1f : 0f;
                     curve.AddKey(0f, value);
                     
-                if (shouldBeActive) activeCount++;
+                    try
+                    {
+                        // Set the curve - this explicitly sets the GameObject's active state
+                        clip.SetCurve(avatarRelativePath, typeof(GameObject), "m_IsActive", curve);
+                        
+                        if (shouldBeActive) activeCount++;
                         else inactiveCount++;
                     }
                     catch (System.Exception ex)
