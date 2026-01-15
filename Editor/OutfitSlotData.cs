@@ -12,7 +12,7 @@ namespace Soph.AvatarOutfitManager.Editor
     public class GameObjectState
     {
         /// <summary>
-        /// Relative path from the outfit root to this GameObject.
+        /// Relative path from the avatar root to this GameObject.
         /// Example: "Jacket/Sleeves" for a nested object.
         /// </summary>
         public string path;
@@ -54,6 +54,12 @@ namespace Soph.AvatarOutfitManager.Editor
         public List<GameObjectState> objectStates;
 
         /// <summary>
+        /// List of relative paths to GameObjects that should be tracked for this outfit slot.
+        /// These are manually selected by the user. Only these objects will be saved/loaded.
+        /// </summary>
+        public List<string> trackedObjectPaths;
+
+        /// <summary>
         /// Indicates whether this slot has been configured with outfit data.
         /// Used to distinguish between empty slots and slots with all objects disabled.
         /// </summary>
@@ -69,6 +75,7 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             slotName = string.Empty;
             objectStates = new List<GameObjectState>();
+            trackedObjectPaths = new List<string>();
             isConfigured = false;
         }
 
@@ -76,6 +83,7 @@ namespace Soph.AvatarOutfitManager.Editor
         {
             slotName = name;
             objectStates = new List<GameObjectState>();
+            trackedObjectPaths = new List<string>();
             isConfigured = false;
         }
 
@@ -85,6 +93,7 @@ namespace Soph.AvatarOutfitManager.Editor
         public void Clear()
         {
             objectStates.Clear();
+            trackedObjectPaths.Clear();
             isConfigured = false;
             iconPath = null;
         }
@@ -158,12 +167,20 @@ namespace Soph.AvatarOutfitManager.Editor
             }
             else
             {
-                // Ensure no null slots
+                // Ensure no null slots and initialize trackedObjectPaths
                 for (int i = 0; i < SLOT_COUNT; i++)
                 {
                     if (slots[i] == null)
                     {
                         slots[i] = new OutfitSlot($"Outfit {i}");
+                    }
+                    else
+                    {
+                        // Ensure trackedObjectPaths is initialized
+                        if (slots[i].trackedObjectPaths == null)
+                        {
+                            slots[i].trackedObjectPaths = new List<string>();
+                        }
                     }
                 }
             }

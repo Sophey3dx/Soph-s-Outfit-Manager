@@ -820,7 +820,312 @@ namespace Soph.AvatarOutfitManager.Editor
                 GUI.backgroundColor = Color.white;
 
                 EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.Space(10);
+
+                // Tracked Objects Section
+                DrawTrackedObjectsSection(currentSlot);
             }
+        }
+
+        private Vector2 trackedObjectsScrollPosition;
+        private GameObject objectToAdd;
+        private string objectSearchFilter = "";
+
+        private void DrawTrackedObjectsSection(OutfitSlot slot)
+        {
+            EditorGUILayout.LabelField("Tracked Objects", EditorStyles.boldLabel);
+            EditorGUILayout.Space(5);
+
+            // Ensure trackedObjectPaths is initialized
+            if (slot.trackedObjectPaths == null)
+            {
+                slot.trackedObjectPaths = new List<string>();
+            }
+
+            // Add Object Section
+            EditorGUILayout.BeginHorizontal();
+            
+            // Object Field for drag & drop
+            objectToAdd = EditorGUILayout.ObjectField("Add Object", objectToAdd, typeof(GameObject), true) as GameObject;
+            
+            if (objectToAdd != null)
+            {
+                if (IsObjectUnderAvatar(objectToAdd.transform))
+                {
+                    AddTrackedObject(slot, objectToAdd.transform);
+                    objectToAdd = null;
+                    GUI.FocusControl(null);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Error", 
+                        "The selected object is not under the avatar hierarchy. Please select an object that is a child of the avatar.", 
+                        "OK");
+                    objectToAdd = null;
+                }
+            }
+
+            // Browse Button
+            if (GUILayout.Button("Browse", GUILayout.Width(60)))
+            {
+                ShowObjectPicker(slot);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            // Search Field
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Search:", GUILayout.Width(50));
+            objectSearchFilter = EditorGUILayout.TextField(objectSearchFilter);
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(5);
+
+            // Auto-Detect Button
+            if (GUILayout.Button("Auto-Detect Objects", GUILayout.Height(25)))
+            {
+                AutoDetectTrackedObjects(slot);
+            }
+
+            EditorGUILayout.Space(5);
+
+            // Tracked Objects List
+            if (slot.trackedObjectPaths.Count == 0)
+            {
+                EditorGUILayout.HelpBox("No objects tracked. Add objects manually or use 'Auto-Detect' to find outfit objects automatically.", MessageType.Info);
+            }
+            else
+            {
+                EditorGUILayout.LabelField($"Tracked Objects ({slot.trackedObjectPaths.Count}):", EditorStyles.miniLabel);
+                
+                trackedObjectsScrollPosition = EditorGUILayout.BeginScrollView(trackedObjectsScrollPosition, GUILayout.Height(150));
+                
+                List<string> pathsToRemove = new List<string>();
+                
+                foreach (string path in slot.trackedObjectPaths)
+                {
+                    EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                    
+                    // Find the object
+                    Transform obj = FindObjectByPath(path);
+                    if (obj != null)
+                    {
+                        // Checkbox for active state (for preview)
+                        bool isActive = obj.gameObject.activeSelf;
+                        bool newActive = EditorGUILayout.Toggle(isActive, GUILayout.Width(20));
+                        if (newActive != isActive)
+                        {
+                            Undo.RecordObject(obj.gameObject, "Toggle Object");
+                            obj.gameObject.SetActive(newActive);
+                        }
+                        
+                        // Object name and path
+                        string displayName = obj.name;
+                        if (!string.IsNullOrEmpty(objectSearchFilter) && 
+                            !displayName.ToLowerInvariant().Contains(objectSearchFilter.ToLowerInvariant()) &&
+                            !path.ToLowerInvariant().Contains(objectSearchFilter.ToLowerInvariant()))
+                        {
+                            EditorGUILayout.EndHorizontal();
+                            continue;
+                        }
+                        
+                        EditorGUILayout.LabelField(displayName, GUILayout.Width(150));
+                        EditorGUILayout.LabelField(path, EditorStyles.miniLabel);
+                        
+                        // Remove button
+                        if (GUILayout.Button("×", GUILayout.Width(25)))
+                        {
+                            pathsToRemove.Add(path);
+                        }
+                    }
+                    else
+                    {
+                        // Object not found - show warning
+                        EditorGUILayout.LabelField($"Missing: {path}", new GUIStyle(EditorStyles.miniLabel) 
+                        { 
+                            normal = { textColor = Color.red } 
+                        });
+                        
+                        if (GUILayout.Button("×", GUILayout.Width(25)))
+                        {
+                            pathsToRemove.Add(path);
+                        }
+                    }
+                    
+                    EditorGUILayout.EndHorizontal();
+                }
+                
+                // Remove marked paths
+                if (pathsToRemove.Count > 0)
+                {
+                    Undo.RecordObject(slotData, "Remove Tracked Objects");
+                    foreach (string path in pathsToRemove)
+                    {
+                        slot.trackedObjectPaths.Remove(path);
+                    }
+                    EditorUtility.SetDirty(slotData);
+                }
+                
+                EditorGUILayout.EndScrollView();
+            }
+        }
+
+        private bool IsObjectUnderAvatar(Transform obj)
+        {
+            if (avatarDescriptor == null) return false;
+            
+            Transform current = obj;
+            while (current != null)
+            {
+                if (current == avatarDescriptor.transform)
+                {
+                    return true;
+                }
+                current = current.parent;
+            }
+            return false;
+        }
+
+        private void AddTrackedObject(OutfitSlot slot, Transform obj)
+        {
+            if (avatarDescriptor == null) return;
+            
+            string relativePath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, obj);
+            
+            if (slot.trackedObjectPaths == null)
+            {
+                slot.trackedObjectPaths = new List<string>();
+            }
+            
+            if (!slot.trackedObjectPaths.Contains(relativePath))
+            {
+                Undo.RecordObject(slotData, "Add Tracked Object");
+                slot.trackedObjectPaths.Add(relativePath);
+                EditorUtility.SetDirty(slotData);
+                Debug.Log($"[Outfit Manager] Added tracked object: '{relativePath}'");
+            }
+        }
+
+        private void ShowObjectPicker(OutfitSlot slot)
+        {
+            if (avatarDescriptor == null)
+            {
+                EditorUtility.DisplayDialog("Error", "No avatar selected. Please select an avatar first.", "OK");
+                return;
+            }
+
+            // Create a simple object picker window
+            GenericMenu menu = new GenericMenu();
+            
+            // Collect all objects under avatar
+            List<Transform> allObjects = new List<Transform>();
+            CollectAllTransforms(avatarDescriptor.transform, allObjects);
+            
+            foreach (Transform obj in allObjects)
+            {
+                string path = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, obj);
+                bool isAlreadyTracked = slot.trackedObjectPaths != null && slot.trackedObjectPaths.Contains(path);
+                
+                if (isAlreadyTracked)
+                {
+                    menu.AddDisabledItem(new GUIContent(path));
+                }
+                else
+                {
+                    menu.AddItem(new GUIContent(path), false, () => {
+                        AddTrackedObject(slot, obj);
+                    });
+                }
+            }
+            
+            menu.ShowAsContext();
+        }
+
+        private void CollectAllTransforms(Transform root, List<Transform> result)
+        {
+            result.Add(root);
+            foreach (Transform child in root)
+            {
+                CollectAllTransforms(child, result);
+            }
+        }
+
+        private void AutoDetectTrackedObjects(OutfitSlot slot)
+        {
+            if (avatarDescriptor == null) return;
+            
+            Undo.RecordObject(slotData, "Auto-Detect Tracked Objects");
+            
+            if (slot.trackedObjectPaths == null)
+            {
+                slot.trackedObjectPaths = new List<string>();
+            }
+            
+            slot.trackedObjectPaths.Clear();
+            
+            Transform avatarRoot = avatarDescriptor.transform;
+            List<Transform> detectedObjects = new List<Transform>();
+            CollectLikelyOutfitObjects(avatarRoot, avatarRoot, detectedObjects);
+            
+            foreach (Transform obj in detectedObjects)
+            {
+                string relativePath = VRChatAssetGenerator.GetRelativePath(avatarRoot, obj);
+                if (!slot.trackedObjectPaths.Contains(relativePath))
+                {
+                    slot.trackedObjectPaths.Add(relativePath);
+                }
+            }
+            
+            EditorUtility.SetDirty(slotData);
+            Debug.Log($"[Outfit Manager] Auto-detected {slot.trackedObjectPaths.Count} objects for slot {selectedSlotIndex}");
+        }
+
+        private void CollectLikelyOutfitObjects(Transform root, Transform current, List<Transform> result)
+        {
+            foreach (Transform child in current)
+            {
+                if (ShouldSkipCapture(child))
+                {
+                    CollectLikelyOutfitObjects(root, child, result);
+                    continue;
+                }
+                
+                if (IsLikelyOutfitObject(child))
+                {
+                    result.Add(child);
+                }
+                
+                CollectLikelyOutfitObjects(root, child, result);
+            }
+        }
+
+        private Transform FindObjectByPath(string relativePath)
+        {
+            if (avatarDescriptor == null || string.IsNullOrEmpty(relativePath)) return null;
+            
+            string[] pathParts = relativePath.Split('/');
+            Transform current = avatarDescriptor.transform;
+            
+            foreach (string part in pathParts)
+            {
+                if (string.IsNullOrEmpty(part)) continue;
+                
+                Transform found = null;
+                foreach (Transform child in current)
+                {
+                    if (child.name == part)
+                    {
+                        found = child;
+                        break;
+                    }
+                }
+                
+                if (found == null) return null;
+                current = found;
+            }
+            
+            return current;
         }
 
         private void DrawQuickActions()
@@ -959,6 +1264,28 @@ namespace Soph.AvatarOutfitManager.Editor
             }
         }
         
+        private void MigrateTrackedObjectsFromStates(OutfitSlot slot)
+        {
+            if (slot.objectStates == null || slot.objectStates.Count == 0) return;
+            
+            if (slot.trackedObjectPaths == null)
+            {
+                slot.trackedObjectPaths = new List<string>();
+            }
+            
+            // Migrate: Extract paths from objectStates
+            foreach (var state in slot.objectStates)
+            {
+                if (!string.IsNullOrEmpty(state.path) && !slot.trackedObjectPaths.Contains(state.path))
+                {
+                    slot.trackedObjectPaths.Add(state.path);
+                }
+            }
+            
+            EditorUtility.SetDirty(slotData);
+            Debug.Log($"[Outfit Manager] Migrated {slot.trackedObjectPaths.Count} tracked objects from objectStates for slot");
+        }
+
         private void LoadSlotDataForAvatar()
         {
             if (avatarDescriptor == null) return;
@@ -976,6 +1303,27 @@ namespace Soph.AvatarOutfitManager.Editor
                 if (data != null && data.avatarGuid == avatarGuid)
                 {
                     slotData = data;
+                    
+                    // Migration: Fill trackedObjectPaths from objectStates if empty
+                    if (slotData.slots != null)
+                    {
+                        bool migrated = false;
+                        foreach (var slot in slotData.slots)
+                        {
+                            if (slot != null && 
+                                (slot.trackedObjectPaths == null || slot.trackedObjectPaths.Count == 0) &&
+                                slot.objectStates != null && slot.objectStates.Count > 0)
+                            {
+                                MigrateTrackedObjectsFromStates(slot);
+                                migrated = true;
+                            }
+                        }
+                        if (migrated)
+                        {
+                            EditorUtility.SetDirty(slotData);
+                            AssetDatabase.SaveAssets();
+                        }
+                    }
                     
                     // Try to restore outfit root if path is stored
                     if (!string.IsNullOrEmpty(data.outfitRootPath) && avatarDescriptor != null)
@@ -1006,6 +1354,27 @@ namespace Soph.AvatarOutfitManager.Editor
                     if (data != null)
                     {
                         slotData = data;
+                        
+                        // Migration: Fill trackedObjectPaths from objectStates if empty
+                        if (slotData.slots != null)
+                        {
+                            bool migrated = false;
+                            foreach (var slot in slotData.slots)
+                            {
+                                if (slot != null && 
+                                    (slot.trackedObjectPaths == null || slot.trackedObjectPaths.Count == 0) &&
+                                    slot.objectStates != null && slot.objectStates.Count > 0)
+                                {
+                                    MigrateTrackedObjectsFromStates(slot);
+                                    migrated = true;
+                                }
+                            }
+                            if (migrated)
+                            {
+                                EditorUtility.SetDirty(slotData);
+                            }
+                        }
+                        
                         // Update GUID for future lookups
                         slotData.avatarGuid = avatarGuid;
                         if (outfitRoot != null)
@@ -1151,29 +1520,77 @@ namespace Soph.AvatarOutfitManager.Editor
             var currentSlot = slotData.slots[selectedSlotIndex];
             Undo.RecordObject(slotData, "Save Outfit to Slot");
 
+            // Ensure trackedObjectPaths is initialized
+            if (currentSlot.trackedObjectPaths == null)
+            {
+                currentSlot.trackedObjectPaths = new List<string>();
+            }
+
+            // Check if there are tracked objects
+            if (currentSlot.trackedObjectPaths.Count == 0)
+            {
+                bool autoDetect = EditorUtility.DisplayDialog("No Tracked Objects", 
+                    "No objects are tracked for this slot. Would you like to auto-detect outfit objects?\n\n" +
+                    "Click 'Yes' to auto-detect, or 'No' to manually add objects first.", 
+                    "Yes", "No");
+                
+                if (autoDetect)
+                {
+                    AutoDetectTrackedObjects(currentSlot);
+                }
+                else
+                {
+                    return;
+                }
+            }
+
             currentSlot.objectStates.Clear();
             
-            // Collect all outfit objects directly from avatar root (objects stay where they are)
-            // This captures all clothing/accessory objects regardless of where they are in the hierarchy
+            // Only save states for tracked objects
             Transform avatarRoot = avatarDescriptor.transform;
-            Debug.Log($"[Outfit Manager] Collecting outfit objects from avatar root '{avatarRoot.name}'...");
+            int savedCount = 0;
+            int missingCount = 0;
             
-            CollectObjectStates(avatarRoot, avatarRoot, currentSlot.objectStates);
+            foreach (string path in currentSlot.trackedObjectPaths)
+            {
+                Transform obj = FindObjectByPath(path);
+                if (obj != null)
+                {
+                    currentSlot.objectStates.Add(new GameObjectState
+                    {
+                        path = path,
+                        isActive = obj.gameObject.activeSelf
+                    });
+                    savedCount++;
+                }
+                else
+                {
+                    Debug.LogWarning($"[Outfit Manager] Tracked object not found: '{path}'");
+                    missingCount++;
+                }
+            }
+            
             currentSlot.isConfigured = true;
             
-            // Warn if no objects collected
-            if (currentSlot.objectStates.Count == 0)
+            // Warn if objects are missing
+            if (missingCount > 0)
             {
-                Debug.LogWarning($"[Outfit Manager] WARNING: No outfit objects collected from avatar '{avatarRoot.name}'. " +
-                    "Make sure your clothing/accessory GameObjects are children of the avatar.");
                 EditorUtility.DisplayDialog("Warning", 
-                    $"No outfit objects were collected from '{avatarRoot.name}'.\n\n" +
-                    "This is normal if all outfit objects are currently hidden. Make sure at least some clothing/accessory objects are visible or exist under the avatar.", 
+                    $"{missingCount} tracked object(s) could not be found. They may have been deleted or moved.\n\n" +
+                    $"Saved {savedCount} object state(s).", 
                     "OK");
+            }
+            
+            if (savedCount == 0)
+            {
+                EditorUtility.DisplayDialog("Warning", 
+                    "No objects were saved. Make sure tracked objects exist and are under the avatar hierarchy.", 
+                    "OK");
+                currentSlot.isConfigured = false;
             }
             else
             {
-                Debug.Log($"[Outfit Manager] Collected {currentSlot.objectStates.Count} outfit objects from avatar hierarchy.");
+                Debug.Log($"[Outfit Manager] Saved {savedCount} tracked objects to slot {selectedSlotIndex} (Slot name: '{currentSlot.slotName}')");
             }
             
             // Update avatar reference
@@ -1196,8 +1613,6 @@ namespace Soph.AvatarOutfitManager.Editor
             
             // Update component if it exists
             UpdateComponentSlotData();
-
-            Debug.Log($"[Outfit Manager] Saved {currentSlot.objectStates.Count} objects to slot {selectedSlotIndex} (Slot name: '{currentSlot.slotName}')");
         }
 
         private void CollectObjectStates(Transform root, Transform current, List<GameObjectState> states)
@@ -1348,24 +1763,59 @@ namespace Soph.AvatarOutfitManager.Editor
 
         private void LoadSlotInEditor()
         {
-            if (slotData == null || outfitRoot == null) return;
+            if (slotData == null || avatarDescriptor == null) return;
 
             var currentSlot = slotData.slots[selectedSlotIndex];
             if (!currentSlot.isConfigured) return;
 
-            var pathToObject = new Dictionary<string, Transform>();
-            CollectPathMappings(outfitRoot, outfitRoot, pathToObject);
-
-            foreach (var state in currentSlot.objectStates)
+            // Ensure trackedObjectPaths is initialized
+            if (currentSlot.trackedObjectPaths == null || currentSlot.trackedObjectPaths.Count == 0)
             {
-                if (pathToObject.TryGetValue(state.path, out Transform obj))
+                // Migration: If no tracked objects but we have objectStates, use those
+                if (currentSlot.objectStates != null && currentSlot.objectStates.Count > 0)
                 {
-                    Undo.RecordObject(obj.gameObject, "Load Outfit Slot");
-                    obj.gameObject.SetActive(state.isActive);
+                    MigrateTrackedObjectsFromStates(currentSlot);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("No Tracked Objects", 
+                        "This slot has no tracked objects. Please add objects to track first.", 
+                        "OK");
+                    return;
                 }
             }
 
-            Debug.Log($"[Outfit Manager] Loaded slot {selectedSlotIndex} in Editor");
+            Transform avatarRoot = avatarDescriptor.transform;
+            int loadedCount = 0;
+            int missingCount = 0;
+
+            // Load only tracked objects
+            foreach (string path in currentSlot.trackedObjectPaths)
+            {
+                Transform obj = FindObjectByPath(path);
+                if (obj != null)
+                {
+                    // Find the state for this object
+                    GameObjectState state = currentSlot.objectStates?.Find(s => s.path == path);
+                    if (state != null)
+                    {
+                        Undo.RecordObject(obj.gameObject, "Load Outfit Slot");
+                        obj.gameObject.SetActive(state.isActive);
+                        loadedCount++;
+                    }
+                }
+                else
+                {
+                    missingCount++;
+                }
+            }
+
+            if (missingCount > 0)
+            {
+                Debug.LogWarning($"[Outfit Manager] {missingCount} tracked object(s) not found when loading slot {selectedSlotIndex}");
+            }
+
+            Debug.Log($"[Outfit Manager] Loaded {loadedCount} tracked objects for slot {selectedSlotIndex} in Editor");
         }
 
         private void CollectPathMappings(Transform root, Transform current, Dictionary<string, Transform> mappings)

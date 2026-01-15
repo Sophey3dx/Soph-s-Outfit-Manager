@@ -200,7 +200,73 @@ namespace Soph.AvatarOutfitManager.Editor
                 return false;
             }
 
+            // Validate that all tracked objects still exist
+            List<string> missingObjects = new List<string>();
+            Transform avatarRoot = avatarDescriptor.transform;
+            
+            foreach (var slot in slotData.slots)
+            {
+                if (slot != null && slot.isConfigured && slot.trackedObjectPaths != null)
+                {
+                    foreach (string path in slot.trackedObjectPaths)
+                    {
+                        if (!ValidateTrackedObjectExists(avatarRoot, path))
+                        {
+                            missingObjects.Add($"{slot.slotName}: {path}");
+                        }
+                    }
+                }
+            }
+            
+            if (missingObjects.Count > 0)
+            {
+                string missingList = string.Join("\n", missingObjects.Take(10));
+                if (missingObjects.Count > 10)
+                {
+                    missingList += $"\n... and {missingObjects.Count - 10} more";
+                }
+                
+                bool continueAnyway = EditorUtility.DisplayDialog("Missing Tracked Objects", 
+                    $"Some tracked objects could not be found:\n\n{missingList}\n\n" +
+                    "These objects may have been deleted or moved. Continue anyway?", 
+                    "Continue", "Cancel");
+                
+                if (!continueAnyway)
+                {
+                    error = "Generation cancelled due to missing tracked objects.";
+                    return false;
+                }
+            }
+
             return true;
+        }
+
+        private static bool ValidateTrackedObjectExists(Transform avatarRoot, string relativePath)
+        {
+            if (string.IsNullOrEmpty(relativePath)) return false;
+            
+            string[] pathParts = relativePath.Split('/');
+            Transform current = avatarRoot;
+            
+            foreach (string part in pathParts)
+            {
+                if (string.IsNullOrEmpty(part)) continue;
+                
+                Transform found = null;
+                foreach (Transform child in current)
+                {
+                    if (child.name == part)
+                    {
+                        found = child;
+                        break;
+                    }
+                }
+                
+                if (found == null) return false;
+                current = found;
+            }
+            
+            return current != null;
         }
 
         private static List<AnimationClip> GenerateAnimationClips(

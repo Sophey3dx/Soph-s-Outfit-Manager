@@ -199,7 +199,8 @@ namespace Soph.AvatarOutfitManager.Editor
         private void ValidateSlotObjects(ValidationResult result)
         {
             var pathToTransform = new Dictionary<string, Transform>();
-            CollectPathMappings(OutfitRoot, OutfitRoot, pathToTransform);
+            // Use avatar root to collect mapping, as tracked paths are relative to avatar
+            CollectPathMappings(avatarDescriptor.transform, avatarDescriptor.transform, pathToTransform);
 
             for (int i = 0; i < OutfitSlotData.SLOT_COUNT; i++)
             {
