@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -721,15 +722,9 @@ namespace Soph.AvatarOutfitManager.Editor
                             : slotData.slots[i].slotName,
                         type = VRCExpressionsMenu.Control.ControlType.Button,
                         icon = slotIcon,
-                        // Use subParameters to set Int parameter value for Button controls
-                        subParameters = new VRCExpressionsMenu.Control.Parameter[]
-                        {
-                            new VRCExpressionsMenu.Control.Parameter
-                            {
-                                name = PARAMETER_NAME,
-                                value = i
-                            }
-                        }
+                        // Set the parameter and value directly on the control
+                        parameter = new VRCExpressionsMenu.Control.Parameter { name = PARAMETER_NAME },
+                        value = i
                     };
                     outfitMenu.controls.Add(buttonControl);
                 }
