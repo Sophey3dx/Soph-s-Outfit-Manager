@@ -160,6 +160,11 @@ Or manually:
 
 ## Changelog
 
+### v1.2.3
+- Fixed "Mixed Write Defaults" error: Automatically detects avatar's Write Defaults preference
+- OutfitManager states now match avatar's Write Defaults setting (ON/OFF)
+- No more "broken mixed write defaults" warnings in VRChat
+
 ### v1.2.2
 - Improved Inspector: Detailed slot overview, validation warnings, and diagnostics
 - Added "Diagnostics & Fix" panel: One-click repair for missing assets

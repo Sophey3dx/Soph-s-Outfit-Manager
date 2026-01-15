@@ -52,14 +52,21 @@ namespace Soph.AvatarOutfitManager.Editor
 
             try
             {
+                EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Detecting avatar Write Defaults preference...", 0.05f);
+
+                // Get FX controller first to detect Write Defaults preference
+                var fxController = GetOrCreateFXController(avatarDescriptor, outputFolder);
+                bool useWriteDefaults = DetectAvatarWriteDefaultsPreference(fxController);
+
                 EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Creating animation clips...", 0.1f);
 
                 // Generate animation clips for each configured slot
+                // Note: Clips always set all objects explicitly to work with both Write Defaults ON and OFF
                 var animationClips = GenerateAnimationClips(avatarDescriptor.transform, outfitRoot, slotData, outputFolder);
 
                 EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Setting up FX layer...", 0.4f);
 
-                // Setup or update FX animator layer
+                // Setup or update FX animator layer (will use detected Write Defaults preference)
                 SetupFXLayer(avatarDescriptor, animationClips, outputFolder);
 
                 EditorUtility.DisplayProgressBar("Generating VRChat Assets", "Creating expression parameters...", 0.6f);
@@ -243,7 +250,8 @@ namespace Soph.AvatarOutfitManager.Editor
                 }
 
                 // Set curves for all tracked objects
-                // IMPORTANT: With Write Defaults OFF, ALL objects must be explicitly set in EVERY clip
+                // IMPORTANT: We always set ALL objects explicitly (both active and inactive) to work with both Write Defaults ON and OFF
+                // This ensures consistency and avoids mixed write defaults errors
                 int activeCount = 0;
                 int inactiveCount = 0;
                 int errorCount = 0;
@@ -315,6 +323,10 @@ namespace Soph.AvatarOutfitManager.Editor
             // Add parameter if not exists
             AddParameterIfNotExists(fxController, PARAMETER_NAME, AnimatorControllerParameterType.Int);
 
+            // Detect avatar's Write Defaults preference to avoid mixed write defaults errors
+            bool useWriteDefaults = DetectAvatarWriteDefaultsPreference(fxController);
+            Debug.Log($"[Outfit Manager] Using Write Defaults {(useWriteDefaults ? "ON" : "OFF")} for OutfitManager states to match avatar preference.");
+
             // Create new layer
             var layer = new AnimatorControllerLayer
             {
@@ -342,8 +354,8 @@ namespace Soph.AvatarOutfitManager.Editor
                 var state = layer.stateMachine.AddState(animationClips[i].name, position);
                 state.motion = animationClips[i];
                 
-                // VRChat Best Practice: Write Defaults OFF
-                state.writeDefaultValues = false;
+                // Match avatar's Write Defaults preference to avoid mixed write defaults errors
+                state.writeDefaultValues = useWriteDefaults;
                 
                 states.Add(state);
             }
@@ -414,6 +426,52 @@ namespace Soph.AvatarOutfitManager.Editor
             fxController.AddLayer(layer);
 
             EditorUtility.SetDirty(fxController);
+        }
+
+        /// <summary>
+        /// Detects the avatar's Write Defaults preference by checking existing FX layer states.
+        /// Returns true if most states use Write Defaults ON, false if OFF.
+        /// Defaults to false (OFF) if no states are found or mixed.
+        /// </summary>
+        private static bool DetectAvatarWriteDefaultsPreference(AnimatorController fxController)
+        {
+            if (fxController == null) return false;
+
+            int onCount = 0;
+            int offCount = 0;
+
+            // Check all layers in the FX controller
+            foreach (var layer in fxController.layers)
+            {
+                if (layer.stateMachine == null) continue;
+
+                // Check all states in this layer
+                foreach (var state in layer.stateMachine.states)
+                {
+                    if (state.state == null) continue;
+                    
+                    if (state.state.writeDefaultValues)
+                    {
+                        onCount++;
+                    }
+                    else
+                    {
+                        offCount++;
+                    }
+                }
+            }
+
+            // If we found states, use the majority preference
+            if (onCount > 0 || offCount > 0)
+            {
+                bool preference = onCount > offCount;
+                Debug.Log($"[Outfit Manager] Detected Write Defaults: {onCount} ON, {offCount} OFF. Using {(preference ? "ON" : "OFF")}.");
+                return preference;
+            }
+
+            // Default to OFF if no states found (VRChat best practice)
+            Debug.Log("[Outfit Manager] No existing FX states found. Defaulting to Write Defaults OFF.");
+            return false;
         }
 
         private static AnimatorController GetOrCreateFXController(
