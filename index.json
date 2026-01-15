@@ -6,6 +6,23 @@
   "packages": {
     "com.soph.avatar-outfit-manager": {
       "versions": {
+        "1.2.9": {
+          "name": "com.soph.avatar-outfit-manager",
+          "displayName": "Soph's Outfit Manager",
+          "version": "1.2.9",
+          "unity": "2022.3",
+          "description": "Fixed outfit toggle reverting issue.",
+          "author": {
+            "name": "Sophey3dx",
+            "url": "https://github.com/Sophey3dx"
+          },
+          "vpmDependencies": {
+            "com.vrchat.avatars": ">=3.5.0"
+          },
+          "url": "https://github.com/Sophey3dx/Soph-s-Outfit-Manager/releases/download/v1.2.9/com.soph.avatar-outfit-manager-1.2.9.zip",
+          "legacyFolders": {},
+          "legacyFiles": {}
+        },
         "1.2.8": {
           "name": "com.soph.avatar-outfit-manager",
           "displayName": "Soph's Outfit Manager",

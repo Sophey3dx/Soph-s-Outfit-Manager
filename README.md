@@ -160,6 +160,9 @@ Or manually:
 
 ## Changelog
 
+### v1.2.9
+- **Bugfix**: Fixed outfit toggle reverting to first outfit. Changed menu controls from Button to Toggle type so the parameter value persists.
+
 ### v1.2.8
 - **Bugfix**: Fixed compilation error in VRChatAssetGenerator.cs (missing try block)
 
