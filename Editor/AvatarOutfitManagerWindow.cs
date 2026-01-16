@@ -1359,60 +1359,28 @@ namespace Soph.AvatarOutfitManager.Editor
             if (avatarDescriptor == null) return;
             
             string avatarGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(avatarDescriptor.gameObject));
-            if (string.IsNullOrEmpty(avatarGuid)) return;
+            string avatarName = avatarDescriptor.gameObject.name;
             
             // Search for existing slot data
             string[] guids = AssetDatabase.FindAssets("t:OutfitSlotData");
-            foreach (string guid in guids)
+            
+            // First try: Match by GUID (for prefab-based avatars)
+            if (!string.IsNullOrEmpty(avatarGuid))
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                var data = AssetDatabase.LoadAssetAtPath<OutfitSlotData>(path);
-                
-                if (data != null && data.avatarGuid == avatarGuid)
+                foreach (string guid in guids)
                 {
-                    slotData = data;
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    var data = AssetDatabase.LoadAssetAtPath<OutfitSlotData>(path);
                     
-                    // Migration: Fill trackedObjectPaths from objectStates if empty
-                    if (slotData.slots != null)
+                    if (data != null && data.avatarGuid == avatarGuid)
                     {
-                        bool migrated = false;
-                        foreach (var slot in slotData.slots)
-                        {
-                            if (slot != null && 
-                                (slot.trackedObjectPaths == null || slot.trackedObjectPaths.Count == 0) &&
-                                slot.objectStates != null && slot.objectStates.Count > 0)
-                            {
-                                MigrateTrackedObjectsFromStates(slot);
-                                migrated = true;
-                            }
-                        }
-                        if (migrated)
-                        {
-                            EditorUtility.SetDirty(slotData);
-                            AssetDatabase.SaveAssets();
-                        }
+                        LoadFoundSlotData(data, path);
+                        return;
                     }
-                    
-                    // Try to restore outfit root if path is stored
-                    if (!string.IsNullOrEmpty(data.outfitRootPath) && avatarDescriptor != null)
-                    {
-                        Transform foundRoot = FindTransformByPath(avatarDescriptor.transform, data.outfitRootPath);
-                        if (foundRoot != null)
-                        {
-                            outfitRoot = foundRoot;
-                        }
-                    }
-                    
-                    // Update component if it exists
-                    UpdateComponentSlotData();
-                    
-                    Debug.Log($"[Outfit Manager] Loaded existing slot data: {path}");
-                    return;
                 }
             }
             
-            // Also try to find by avatar name (fallback for old data)
-            string avatarName = avatarDescriptor.gameObject.name;
+            // Second try: Match by avatar name in filename (for scene-based avatars)
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
@@ -1421,45 +1389,54 @@ namespace Soph.AvatarOutfitManager.Editor
                     var data = AssetDatabase.LoadAssetAtPath<OutfitSlotData>(path);
                     if (data != null)
                     {
-                        slotData = data;
-                        
-                        // Migration: Fill trackedObjectPaths from objectStates if empty
-                        if (slotData.slots != null)
-                        {
-                            bool migrated = false;
-                            foreach (var slot in slotData.slots)
-                            {
-                                if (slot != null && 
-                                    (slot.trackedObjectPaths == null || slot.trackedObjectPaths.Count == 0) &&
-                                    slot.objectStates != null && slot.objectStates.Count > 0)
-                                {
-                                    MigrateTrackedObjectsFromStates(slot);
-                                    migrated = true;
-                                }
-                            }
-                            if (migrated)
-                            {
-                                EditorUtility.SetDirty(slotData);
-                            }
-                        }
-                        
-                        // Update GUID for future lookups
-                        slotData.avatarGuid = avatarGuid;
-                        if (outfitRoot != null)
-                        {
-                            slotData.outfitRootPath = VRChatAssetGenerator.GetRelativePath(avatarDescriptor.transform, outfitRoot);
-                        }
-                        EditorUtility.SetDirty(slotData);
-                        AssetDatabase.SaveAssets();
-                        
-                        // Update component if it exists
-                        UpdateComponentSlotData();
-                        
-                        Debug.Log($"[Outfit Manager] Loaded slot data by name and updated GUID: {path}");
+                        LoadFoundSlotData(data, path);
                         return;
                     }
                 }
             }
+            
+            Debug.Log($"[Outfit Manager] No existing slot data found for avatar '{avatarName}'");
+        }
+        
+        private void LoadFoundSlotData(OutfitSlotData data, string path)
+        {
+            slotData = data;
+            
+            // Migration: Fill trackedObjectPaths from objectStates if empty
+            if (slotData.slots != null)
+            {
+                bool migrated = false;
+                foreach (var slot in slotData.slots)
+                {
+                    if (slot != null && 
+                        (slot.trackedObjectPaths == null || slot.trackedObjectPaths.Count == 0) &&
+                        slot.objectStates != null && slot.objectStates.Count > 0)
+                    {
+                        MigrateTrackedObjectsFromStates(slot);
+                        migrated = true;
+                    }
+                }
+                if (migrated)
+                {
+                    EditorUtility.SetDirty(slotData);
+                    AssetDatabase.SaveAssets();
+                }
+            }
+            
+            // Try to restore outfit root if path is stored
+            if (!string.IsNullOrEmpty(data.outfitRootPath) && avatarDescriptor != null)
+            {
+                Transform foundRoot = FindTransformByPath(avatarDescriptor.transform, data.outfitRootPath);
+                if (foundRoot != null)
+                {
+                    outfitRoot = foundRoot;
+                }
+            }
+            
+            // Update component if it exists
+            UpdateComponentSlotData();
+            
+            Debug.Log($"[Outfit Manager] Loaded existing slot data: {path}");
         }
 
         private void UpdateComponentSlotData()
